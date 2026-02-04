@@ -1,4 +1,4 @@
-import { getLogger, generateId } from '@auto-claude/core';
+import { getLogger, generateId, getRateLimitManager } from '@auto-claude/core';
 import { spawn, ChildProcess } from 'child_process';
 
 const logger = getLogger('ai-router:claude-cli');
@@ -17,6 +17,7 @@ export interface ClaudeResult {
   exitCode: number | null;
   duration: number;
   error?: string;
+  isRateLimited?: boolean;
 }
 
 export interface ClaudeStreamEvent {
@@ -102,12 +103,17 @@ export class ClaudeCLI {
           });
         } else {
           logger.error('Claude task failed', { taskId, code, stderr });
+          const isRateLimited = this.detectRateLimit(stdout, stderr);
+          if (isRateLimited) {
+            getRateLimitManager().recordRateLimitHit('claude-cli');
+          }
           resolve({
             success: false,
             output: stdout,
             exitCode: code,
             duration,
             error: stderr || `Process exited with code ${code}`,
+            isRateLimited,
           });
         }
       });
@@ -143,6 +149,19 @@ export class ClaudeCLI {
     }
 
     return args;
+  }
+
+  private detectRateLimit(output: string, error: string): boolean {
+    const combined = `${output} ${error}`.toLowerCase();
+    const patterns = [
+      /rate limit/i,
+      /too many requests/i,
+      /429/i,
+      /quota exceeded/i,
+      /overloaded/i,
+      /capacity/i,
+    ];
+    return patterns.some((p) => p.test(combined));
   }
 
   async executeWithStreaming(

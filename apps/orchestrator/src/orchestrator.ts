@@ -1,4 +1,4 @@
-import { SystemState, WorkPhase, getLogger, ensureDirectories, getConfig, type Suggestion } from '@auto-claude/core';
+import { SystemState, WorkPhase, getLogger, ensureDirectories, getConfig, getRateLimitManager, type Suggestion } from '@auto-claude/core';
 import { getLossLimiter, getBoundaryGuard, getResourceManager } from '@auto-claude/safety';
 import { getBackupManager } from '@auto-claude/backup';
 import { getAuditLogger } from '@auto-claude/audit';
@@ -82,6 +82,11 @@ export class Orchestrator {
       // .gitignore の確保
       await this.githubManager.ensureGitignore();
 
+      // レートリミット通知コールバックを設定
+      getRateLimitManager().setNotificationCallback(async (isActive, details) => {
+        await this.discord.sendRateLimitAlert(isActive, details);
+      });
+
       // スケジュールタスクの登録
       this.registerScheduledTasks();
 
@@ -127,6 +132,7 @@ export class Orchestrator {
       name: 'ヘルスチェック',
       intervalMs: 5 * 60 * 1000,
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         await this.heartbeat.beat();
         // スケジューラステータスを保存（ダッシュボード用）
@@ -140,6 +146,7 @@ export class Orchestrator {
       name: '提案チェック',
       intervalMs: 5 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         await this.processPendingSuggestions();
       },
@@ -151,6 +158,7 @@ export class Orchestrator {
       name: 'ハートビート通知',
       intervalMs: 30 * 60 * 1000,
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         const status = await this.heartbeat.beat();
         await this.discord.sendInfo(
@@ -166,6 +174,7 @@ export class Orchestrator {
       name: '日次バックアップ',
       cronExpression: '0 3 * * *',
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.MAINTAINING, 'バックアップを作成中', 'daily_backup', {
           currentGoal: 'データ保護',
@@ -184,6 +193,7 @@ export class Orchestrator {
       name: '日次分析',
       cronExpression: '0 6 * * *',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         // 学習サイクルレビュー
         this.heartbeat.setPhase(WorkPhase.LEARNING, '過去のパフォーマンスをレビュー中', 'daily_analysis', {
@@ -229,6 +239,7 @@ export class Orchestrator {
       name: '週報生成',
       cronExpression: '0 6 * * 1',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.ANALYZING, '週次レポートを生成中', 'weekly_report', {
           currentGoal: '週次振り返り',
@@ -257,6 +268,7 @@ export class Orchestrator {
       name: '戦略実行',
       intervalMs: 30 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.IMPLEMENTING, '戦略を実行中', 'strategy_execution', {
           currentGoal: '収益化推進',
@@ -275,6 +287,7 @@ export class Orchestrator {
       name: '採択提案の自動実装',
       intervalMs: 30 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         await this.implementAcceptedSuggestions();
       },
@@ -286,6 +299,7 @@ export class Orchestrator {
       name: '改善機会探索',
       intervalMs: 60 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.LEARNING, '改善機会を探索中', 'improvement_seek', {
           currentGoal: '継続的改善',
@@ -304,6 +318,7 @@ export class Orchestrator {
       name: '承認リクエストクリーンアップ',
       intervalMs: 60 * 60 * 1000,
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         this.approvalGate.cleanupExpired();
       },
@@ -315,6 +330,7 @@ export class Orchestrator {
       name: 'リソース監視',
       intervalMs: 5 * 60 * 1000,
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         this.resourceManager.adjustByTime();
         await this.resourceManager.checkResources();
@@ -327,6 +343,7 @@ export class Orchestrator {
       name: '損失チェック',
       intervalMs: 10 * 60 * 1000,
       enabled: true,
+      requiresClaude: false,
       handler: async () => {
         const status = this.lossLimiter.checkAndWarn();
         if (status.isBlocked) {
@@ -344,6 +361,7 @@ export class Orchestrator {
       name: '戦略自動アクティベーション',
       intervalMs: 60 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.PLANNING, 'DRAFT戦略を評価中', 'strategy_activation', {
           currentGoal: '戦略自動有効化',
@@ -363,6 +381,7 @@ export class Orchestrator {
       name: '自動改善処理',
       intervalMs: 60 * 60 * 1000,
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.LEARNING, '保留中の改善を自動処理中', 'auto_improve', {
           currentGoal: '自動改善',
@@ -389,6 +408,7 @@ export class Orchestrator {
       name: '改善検証',
       cronExpression: '0 7 * * *',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.REVIEWING, '実装済み改善の効果を検証中', 'improvement_verify', {
           currentGoal: '改善効果検証',
@@ -416,6 +436,7 @@ export class Orchestrator {
       name: 'システム診断',
       cronExpression: '0 5 * * *',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.ANALYZING, 'システム全体を診断中', 'system_diagnosis', {
           currentGoal: 'システム健康診断',
@@ -443,6 +464,7 @@ export class Orchestrator {
       name: '週次振り返り',
       cronExpression: '0 21 * * 0',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.LEARNING, '週次振り返りを実行中', 'weekly_retrospective', {
           currentGoal: '週次振り返り',
@@ -470,6 +492,7 @@ export class Orchestrator {
       name: '成功パターン抽出',
       cronExpression: '0 9 * * 6',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.LEARNING, '成功パターンを抽出中', 'pattern_extraction', {
           currentGoal: 'パターン抽出・再利用化',
@@ -505,6 +528,7 @@ export class Orchestrator {
       name: 'ドキュメント同期チェック',
       cronExpression: '0 8 * * *',
       enabled: true,
+      requiresClaude: true,
       handler: async () => {
         this.heartbeat.setPhase(WorkPhase.REVIEWING, 'ドキュメント同期状態を確認中', 'doc_sync_check', {
           currentGoal: 'ドキュメント同期',
@@ -674,6 +698,14 @@ export class Orchestrator {
   }
 
   private async processPendingSuggestions(): Promise<void> {
+    // レートリミット中は提案処理をスキップ
+    if (getRateLimitManager().isRateLimited()) {
+      logger.info('Skipping suggestion processing due to rate limit', {
+        remainingMs: getRateLimitManager().getRemainingCooldownMs(),
+      });
+      return;
+    }
+
     const pendingSuggestions = this.suggestionGate.getPending();
     const deferredSuggestions = this.suggestionGate.getDeferred();
 
@@ -696,6 +728,12 @@ export class Orchestrator {
       });
 
       for (const suggestion of pendingSuggestions) {
+        // レートリミットが発生したら残りの処理をスキップ
+        if (getRateLimitManager().isRateLimited()) {
+          logger.info('Stopping suggestion processing due to rate limit detection');
+          break;
+        }
+
         this.heartbeat.setPhase(WorkPhase.PLANNING, `ユーザー提案「${suggestion.title}」をAI分析中`, 'suggestions', {
           currentGoal: 'ユーザー要望への対応',
           nextSteps: ['提案の分析・評価', 'Discordへ回答を通知'],
@@ -732,6 +770,13 @@ export class Orchestrator {
           });
         } catch (error) {
           logger.error('Failed to process suggestion', { id: suggestion.id, error });
+
+          // レートリミット中はフォールバックを使わず、提案をpendingのまま維持
+          if (getRateLimitManager().isRateLimited()) {
+            logger.info('Keeping suggestion as pending due to rate limit', { id: suggestion.id });
+            continue;
+          }
+
           // フォールバック: 簡易分析
           const fallbackAnalysis = this.analyzeSuggestionFallback(suggestion);
           this.suggestionGate.respond(
@@ -748,13 +793,18 @@ export class Orchestrator {
     }
 
     // 保留中の提案を再検討
-    if (deferredSuggestions.length > 0) {
+    if (deferredSuggestions.length > 0 && !getRateLimitManager().isRateLimited()) {
       this.heartbeat.setPhase(WorkPhase.REVIEWING, `保留中の提案を再検討中（${deferredSuggestions.length}件）`, 'suggestions', {
         currentGoal: '保留提案の再評価',
         nextSteps: ['再検討', '状況変化の確認'],
       });
 
       for (const suggestion of deferredSuggestions) {
+        // レートリミットが発生したら残りの処理をスキップ
+        if (getRateLimitManager().isRateLimited()) {
+          logger.info('Stopping deferred suggestion review due to rate limit');
+          break;
+        }
         await this.reviewDeferredSuggestion(suggestion);
       }
     }
@@ -841,6 +891,12 @@ ${isQuestion ? `これはユーザーからの質問です。質問に対して�
   }
 
   private async reviewDeferredSuggestion(suggestion: Suggestion): Promise<void> {
+    // レートリミット中はreviewCountをインクリメントしない
+    if (getRateLimitManager().isRateLimited()) {
+      logger.info('Skipping deferred review due to rate limit', { id: suggestion.id });
+      return;
+    }
+
     const reviewCount = this.suggestionGate.incrementReviewCount(suggestion.id);
     const maxReviews = 5; // 5回再検討後は自動却下
 
@@ -892,6 +948,12 @@ ${isQuestion ? `これはユーザーからの質問です。質問に対して�
         timeout: 30000,
         allowedTools: [],
       });
+
+      // レートリミットが検出された場合は処理を中断（reviewCountは既にインクリメント済みだが許容）
+      if (result.isRateLimited) {
+        logger.info('Rate limit detected during deferred review', { id: suggestion.id });
+        return;
+      }
 
       if (result.success) {
         const jsonMatch = result.output.match(/\{[\s\S]*\}/);

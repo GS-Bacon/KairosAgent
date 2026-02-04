@@ -1,4 +1,4 @@
-import { getLogger } from '@auto-claude/core';
+import { getLogger, getRateLimitManager } from '@auto-claude/core';
 import { MemoryManager } from '@auto-claude/memory';
 
 const logger = getLogger('orchestrator:scheduler');
@@ -12,6 +12,7 @@ export interface ScheduledTask {
   lastRun?: Date;
   nextRun?: Date;
   enabled: boolean;
+  requiresClaude?: boolean;
 }
 
 export class Scheduler {
@@ -93,6 +94,19 @@ export class Scheduler {
   }
 
   private async executeTask(task: ScheduledTask): Promise<void> {
+    // レートリミット中はClaude依存タスクをスキップ
+    if (task.requiresClaude && getRateLimitManager().isRateLimited()) {
+      logger.info('Skipping Claude-dependent task due to rate limit', {
+        id: task.id,
+        name: task.name,
+        remainingMs: getRateLimitManager().getRemainingCooldownMs(),
+      });
+      // 次回実行をスケジュールしてスキップ
+      task.nextRun = this.calculateNextRun(task);
+      this.scheduleTask(task);
+      return;
+    }
+
     logger.info('Executing scheduled task', { id: task.id, name: task.name });
 
     try {

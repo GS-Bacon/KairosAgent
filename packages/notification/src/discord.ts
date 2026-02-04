@@ -224,6 +224,14 @@ export class DiscordNotifier {
     return this.send({ type: 'suggestionResponse', title, description, fields });
   }
 
+  async sendRateLimitAlert(isActive: boolean, details?: string): Promise<boolean> {
+    return this.send({
+      type: isActive ? 'warning' : 'info',
+      title: isActive ? 'レートリミット検出' : 'レートリミット解除',
+      description: details,
+    });
+  }
+
   private createEmbed(message: DiscordMessage): DiscordEmbed {
     const typeIcons: Record<DiscordMessage['type'], string> = {
       info: 'ℹ️',
