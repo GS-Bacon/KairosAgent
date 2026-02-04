@@ -48,6 +48,9 @@ export class OpencodeCLI {
 
       this.runningProcesses.set(taskId, proc);
 
+      // stdinを閉じないとプロセスが終了しない
+      proc.stdin.end();
+
       let stdout = '';
       let stderr = '';
 
@@ -108,16 +111,13 @@ export class OpencodeCLI {
         });
       });
 
-      // プロンプトを標準入力に書き込む（opnecodeは-pフラグを使わない場合）
-      // proc.stdin.write(task.prompt);
-      // proc.stdin.end();
     });
   }
 
   private buildArgs(task: OpencodeTask): string[] {
     // opencode CLIの引数形式に合わせる
-    // opencode -p "prompt" で実行
-    return ['-p', task.prompt];
+    // opencode run "prompt" で実行
+    return ['run', task.prompt];
   }
 
   private detectRateLimit(output: string, error: string): boolean {
