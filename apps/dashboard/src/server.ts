@@ -6,7 +6,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { getLogger } from '@auto-claude/core';
 import { getApprovalGate, getSuggestionGate } from '@auto-claude/notification';
 import { getLedger } from '@auto-claude/ledger';
-import { getStrategyManager } from '@auto-claude/strategies';
+import { getStrategyManager, getStrategyExecutor } from '@auto-claude/strategies';
 import { getLossLimiter, getSystemRiskMonitor } from '@auto-claude/safety';
 import { getTaskQueue } from '@auto-claude/ai-router';
 import { getAuditLogger } from '@auto-claude/audit';
@@ -97,7 +97,7 @@ export class DashboardServer {
       }
     });
 
-    // 戦略 API
+    // 戦略一覧 API
     this.app.get('/api/strategies', async (req: Request, res: Response) => {
       try {
         const strategyManager = getStrategyManager();
@@ -113,6 +113,45 @@ export class DashboardServer {
         );
       } catch (error) {
         res.status(500).json({ error: 'Failed to get strategies' });
+      }
+    });
+
+    // 戦略詳細 API
+    this.app.get('/api/strategies/:id', async (req: Request, res: Response) => {
+      try {
+        const strategyManager = getStrategyManager();
+        const strategyExecutor = getStrategyExecutor();
+        const strategy = strategyManager.getStrategy(req.params.id);
+
+        if (!strategy) {
+          res.status(404).json({ error: 'Strategy not found' });
+          return;
+        }
+
+        // 中間結果を抽出（config内の _ で始まるキー）
+        const intermediateResults: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(strategy.config)) {
+          if (key.startsWith('_')) {
+            intermediateResults[key.slice(1)] = value;
+          }
+        }
+
+        // 実行履歴を取得
+        const executionHistory = strategyExecutor.getExecutionHistory(strategy.id);
+
+        // 成功率を計算
+        const successRate = strategy.performance.executionCount > 0
+          ? (strategy.performance.successCount / strategy.performance.executionCount) * 100
+          : 0;
+
+        res.json({
+          ...strategy,
+          intermediateResults,
+          executionHistory,
+          successRate: Math.round(successRate * 10) / 10,
+        });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get strategy details' });
       }
     });
 

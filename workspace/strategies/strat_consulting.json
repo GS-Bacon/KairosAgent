@@ -1,0 +1,80 @@
+{
+  "id": "strat_consulting",
+  "name": "AI導入コンサルティング",
+  "description": "企業向けにAI・自動化導入支援を提供。Claude API、ChatGPT API、自動化ツールの導入支援、ワークフロー設計、プロトタイプ開発などを時間単価で提供する。",
+  "type": "freelance",
+  "status": "draft",
+  "expectedRevenue": 10000,
+  "expectedCost": 0,
+  "riskLevel": 1,
+  "createdAt": "2026-02-04T15:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "serviceType": "consulting",
+    "serviceName": "AI導入・自動化コンサルティング",
+    "pricing": {
+      "hourlyRate": 5000,
+      "minimumHours": 2,
+      "packages": [
+        {
+          "name": "スポット相談",
+          "hours": 1,
+          "price": 5000,
+          "description": "AI導入に関する相談、質問対応"
+        },
+        {
+          "name": "導入設計",
+          "hours": 5,
+          "price": 22500,
+          "description": "業務分析、AI活用ポイントの特定、導入計画策定"
+        },
+        {
+          "name": "プロトタイプ開発",
+          "hours": 10,
+          "price": 45000,
+          "description": "概念実証（PoC）、プロトタイプ作成、ドキュメント化"
+        }
+      ]
+    },
+    "targetClients": {
+      "industry": ["IT企業", "スタートアップ", "中小企業"],
+      "painPoints": [
+        "AI導入の進め方がわからない",
+        "ChatGPT/Claude APIの活用方法を知りたい",
+        "業務自動化を実現したい"
+      ]
+    },
+    "services": [
+      "AI/LLM活用戦略策定",
+      "Claude API/OpenAI API導入支援",
+      "業務自動化ワークフロー設計",
+      "プロンプトエンジニアリング指導",
+      "プロトタイプ開発・PoC実施"
+    ],
+    "platforms": [
+      "ココナラ",
+      "クラウドワークス",
+      "ランサーズ",
+      "直接営業"
+    ],
+    "productionSteps": [
+      "サービス設計・料金体系確定",
+      "プロフィール・ポートフォリオ作成",
+      "プラットフォームへの出品",
+      "案件探索・提案活動"
+    ],
+    "deliverables": [
+      "導入計画書",
+      "技術仕様書",
+      "プロトタイプコード",
+      "運用マニュアル"
+    ]
+  }
+}

@@ -5,8 +5,12 @@ import { BaseExecutor, ExecutionResult } from './executors/base-executor.js';
 import { AffiliateExecutor } from './executors/affiliate-executor.js';
 import { FreelanceExecutor } from './executors/freelance-executor.js';
 import { DigitalProductExecutor } from './executors/digital-product-executor.js';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
 
 const logger = getLogger('strategy-executor');
+
+const EXECUTION_HISTORY_PATH = '/home/bacon/AutoClaudeKMP/workspace/execution-history.json';
 
 export class StrategyExecutor {
   private executors: BaseExecutor[] = [];
@@ -20,10 +24,52 @@ export class StrategyExecutor {
     this.registerExecutor(new FreelanceExecutor());
     this.registerExecutor(new DigitalProductExecutor());
 
+    // 実行履歴を読み込み
+    this.loadExecutionHistory();
+
     logger.info('StrategyExecutor initialized', {
       executorCount: this.executors.length,
       supportedTypes: this.getSupportedTypes(),
     });
+  }
+
+  private loadExecutionHistory(): void {
+    try {
+      if (existsSync(EXECUTION_HISTORY_PATH)) {
+        const content = readFileSync(EXECUTION_HISTORY_PATH, 'utf-8');
+        const data = JSON.parse(content) as Record<string, ExecutionResult[]>;
+
+        for (const [strategyId, results] of Object.entries(data)) {
+          this.executionHistory.set(strategyId, results);
+        }
+
+        logger.info('Execution history loaded', {
+          strategiesCount: this.executionHistory.size,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to load execution history', { error });
+    }
+  }
+
+  private saveExecutionHistory(): void {
+    try {
+      const dir = dirname(EXECUTION_HISTORY_PATH);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+
+      const data: Record<string, ExecutionResult[]> = {};
+      for (const [strategyId, results] of this.executionHistory.entries()) {
+        // 直近20件のみ保存（メモリ節約）
+        data[strategyId] = results.slice(-20);
+      }
+
+      writeFileSync(EXECUTION_HISTORY_PATH, JSON.stringify(data, null, 2), 'utf-8');
+      logger.debug('Execution history saved');
+    } catch (error) {
+      logger.error('Failed to save execution history', { error });
+    }
   }
 
   registerExecutor(executor: BaseExecutor): void {
@@ -81,10 +127,11 @@ export class StrategyExecutor {
       cost: result.totalCost,
     });
 
-    // 実行履歴に追加
+    // 実行履歴に追加して永続化
     const history = this.executionHistory.get(strategy.id) || [];
     history.push(result);
     this.executionHistory.set(strategy.id, history);
+    this.saveExecutionHistory();
 
     // 3回連続失敗チェック
     await this.checkConsecutiveFailures(strategy);
