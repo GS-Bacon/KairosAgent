@@ -696,6 +696,86 @@
       transform: translateX(24px);
     }
 
+    /* 小サイズのトグルスイッチ */
+    .toggle-switch.small {
+      width: 40px;
+      height: 22px;
+    }
+
+    .toggle-switch.small .toggle-slider:before {
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+    }
+
+    .toggle-switch.small input:checked + .toggle-slider:before {
+      transform: translateX(18px);
+    }
+
+    /* 通知カテゴリセクション */
+    .notification-category-section {
+      margin-bottom: 20px;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .notification-category-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 15px;
+      background: #2a2a2a;
+      border-bottom: 1px solid #333;
+    }
+
+    .notification-category-icon {
+      font-size: 18px;
+    }
+
+    .notification-category-name {
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .notification-category-desc {
+      font-size: 12px;
+      color: #888;
+      margin-left: auto;
+    }
+
+    .notification-items-list {
+      padding: 5px 15px;
+    }
+
+    .notification-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .notification-item-row:last-child {
+      border-bottom: none;
+    }
+
+    .notification-item-info {
+      flex: 1;
+    }
+
+    .notification-item-name {
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .notification-item-desc {
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
+    }
+
     /* 通知履歴 */
     .notification-history-item {
       display: flex;
@@ -1766,8 +1846,26 @@
       }
     }
 
+    // 通知項目のメタデータをキャッシュ
+    let notificationItemsMeta = null;
+    let notificationCategories = null;
+
+    async function fetchNotificationItemsMeta() {
+      if (notificationItemsMeta) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/notifications/items`);
+        const data = await res.json();
+        notificationItemsMeta = data.items;
+        notificationCategories = data.categories;
+      } catch (error) {
+        console.error('Failed to fetch notification items meta:', error);
+      }
+    }
+
     async function fetchNotificationSettings() {
       try {
+        // まず項目メタデータを取得
+        await fetchNotificationItemsMeta();
         const res = await fetch(`${API_BASE}/api/notifications/settings`);
         const data = await res.json();
         updateNotificationSettings(data);
@@ -2203,17 +2301,8 @@
     function updateNotificationSettings(settings) {
       const container = document.getElementById('notificationSettings');
 
-      const types = [
-        { key: 'info', icon: 'info', name: '情報', desc: 'ハートビート、ステータス更新など' },
-        { key: 'success', icon: 'check_circle', name: '成功', desc: '起動完了、タスク完了など' },
-        { key: 'warning', icon: 'warning', name: '警告', desc: 'リソース警告など' },
-        { key: 'error', icon: 'error', name: 'エラー', desc: '処理エラーなど' },
-        { key: 'critical', icon: 'priority_high', name: '重大', desc: '緊急対応が必要なエラー' },
-        { key: 'audit', icon: 'assignment', name: '監査', desc: '監査ログ（通常無効）' },
-        { key: 'suggestionResponse', icon: 'chat', name: '提案への回答', desc: '提案に対するシステムの回答通知' },
-      ];
-
-      const typeIcons = {
+      // カテゴリアイコンのマッピング
+      const categoryIcons = {
         info: '&#x2139;&#xFE0F;',
         success: '&#x2705;',
         warning: '&#x26A0;&#xFE0F;',
@@ -2223,21 +2312,60 @@
         suggestionResponse: '&#x1F4AC;',
       };
 
-      container.innerHTML = types.map(type => `
-        <div class="notification-setting-item">
-          <div class="notification-type-info">
-            <span class="notification-type-icon">${typeIcons[type.key]}</span>
-            <div>
-              <div class="notification-type-name">${type.name}</div>
-              <div class="notification-type-desc">${type.desc}</div>
+      // 通知項目をカテゴリごとにグループ化
+      if (!notificationItemsMeta || !notificationCategories) {
+        container.innerHTML = '<div class="loading">通知項目を読み込み中...</div>';
+        return;
+      }
+
+      // カテゴリ順序
+      const categoryOrder = ['info', 'success', 'warning', 'error', 'critical', 'suggestionResponse', 'audit'];
+
+      // カテゴリごとに項目をグループ化
+      const itemsByCategory = {};
+      for (const cat of categoryOrder) {
+        itemsByCategory[cat] = notificationItemsMeta.filter(item => item.category === cat);
+      }
+
+      let html = '';
+      for (const cat of categoryOrder) {
+        const items = itemsByCategory[cat];
+        if (items.length === 0) continue;
+
+        const catInfo = notificationCategories[cat];
+        const catIcon = categoryIcons[cat];
+
+        html += `
+          <div class="notification-category-section">
+            <div class="notification-category-header">
+              <span class="notification-category-icon">${catIcon}</span>
+              <span class="notification-category-name">${catInfo.name}</span>
+              <span class="notification-category-desc">${catInfo.description}</span>
+            </div>
+            <div class="notification-items-list">
+              ${items.map(item => {
+                const isEnabled = settings.items && typeof settings.items[item.id] === 'boolean'
+                  ? settings.items[item.id]
+                  : item.defaultEnabled;
+                return `
+                  <div class="notification-item-row">
+                    <div class="notification-item-info">
+                      <div class="notification-item-name">${item.name}</div>
+                      <div class="notification-item-desc">${item.description}</div>
+                    </div>
+                    <label class="toggle-switch small">
+                      <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="updateNotificationItemSetting('${item.id}', this.checked)">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                `;
+              }).join('')}
             </div>
           </div>
-          <label class="toggle-switch">
-            <input type="checkbox" ${settings.discord[type.key] ? 'checked' : ''} onchange="updateNotificationSetting('${type.key}', this.checked)">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      `).join('');
+        `;
+      }
+
+      container.innerHTML = html;
     }
 
     function updateNotificationHistory(history) {
@@ -2437,6 +2565,34 @@
         });
       } catch (error) {
         console.error('Failed to update notification setting:', error);
+        alert('設定の更新に失敗しました。');
+        // チェックボックスを元に戻す
+        fetchNotificationSettings();
+      }
+    }
+
+    async function updateNotificationItemSetting(itemId, enabled) {
+      try {
+        // 現在の設定を取得
+        const res = await fetch(`${API_BASE}/api/notifications/settings`);
+        const settings = await res.json();
+
+        // items が存在しない場合は初期化
+        if (!settings.items) {
+          settings.items = {};
+        }
+
+        // 設定を更新
+        settings.items[itemId] = enabled;
+
+        // 保存
+        await fetch(`${API_BASE}/api/notifications/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+      } catch (error) {
+        console.error('Failed to update notification item setting:', error);
         alert('設定の更新に失敗しました。');
         // チェックボックスを元に戻す
         fetchNotificationSettings();

@@ -253,10 +253,11 @@ export class ExperimentManager {
       newPhase: nextPhase,
     });
 
-    await this.discord.sendInfo({
-      title: `実験フェーズ更新: ${experiment.title}`,
-      description: `新しいフェーズ: ${nextPhase}`,
-    });
+    await this.discord.sendInfo(
+      `実験フェーズ更新: ${experiment.title}`,
+      `新しいフェーズ: ${nextPhase}`,
+      'experiment_phase_update'
+    );
 
     return experiment;
   }
@@ -288,10 +289,11 @@ export class ExperimentManager {
       reason,
     });
 
-    await this.discord.sendWarning({
-      title: `実験中止: ${experiment.title}`,
-      description: reason,
-    });
+    await this.discord.sendWarning(
+      `実験中止: ${experiment.title}`,
+      reason,
+      'experiment_aborted'
+    );
 
     return experiment;
   }
@@ -485,10 +487,11 @@ export class ExperimentManager {
 
   private async adoptExperiment(experiment: Experiment): Promise<void> {
     // 本採用時の処理
-    await this.discord.sendSuccess({
-      title: `実験成功: ${experiment.title}`,
-      description: `仮説: ${experiment.hypothesis}\n結果: ${experiment.results?.summary ?? '成功'}`,
-    });
+    await this.discord.sendSuccess(
+      `実験成功: ${experiment.title}`,
+      `仮説: ${experiment.hypothesis}\n結果: ${experiment.results?.summary ?? '成功'}`,
+      'experiment_success'
+    );
   }
 
   private getTotalResourceAllocation(): number {

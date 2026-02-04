@@ -1,10 +1,11 @@
 import express, { Express, Request, Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { getLogger } from '@auto-claude/core';
-import { getApprovalGate, getSuggestionGate } from '@auto-claude/notification';
+import { getApprovalGate, getSuggestionGate, NOTIFICATION_ITEMS, NOTIFICATION_CATEGORIES, NotificationItemId } from '@auto-claude/notification';
 import { getLedger } from '@auto-claude/ledger';
 import { getStrategyManager, getStrategyExecutor } from '@auto-claude/strategies';
 import { getLossLimiter, getSystemRiskMonitor } from '@auto-claude/safety';
@@ -14,6 +15,25 @@ import { getReportGenerator } from '@auto-claude/self-improve';
 import { getMemoryManager } from '@auto-claude/memory';
 
 const logger = getLogger('dashboard');
+
+// プロジェクトルートを検出（.gitディレクトリを探す）
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (dir !== '/') {
+    if (existsSync(join(dir, '.git'))) {
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  return startDir;
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = findProjectRoot(__dirname);
+
+// orchestratorのワークスペースを参照（notification-history等の共有データ用）
+const ORCHESTRATOR_WORKSPACE = join(PROJECT_ROOT, 'apps/orchestrator/workspace');
 
 export interface DashboardConfig {
   port: number;
@@ -342,10 +362,28 @@ export class DashboardServer {
     // 通知設定取得 API
     this.app.get('/api/notifications/settings', (req: Request, res: Response) => {
       try {
-        const settingsPath = join(process.cwd(), 'workspace', 'notification-settings.json');
+        const settingsPath = join(ORCHESTRATOR_WORKSPACE, 'notification-settings.json');
+        const defaultItems = Object.fromEntries(
+          NOTIFICATION_ITEMS.map(item => [item.id, item.defaultEnabled])
+        );
+
         if (existsSync(settingsPath)) {
           const content = readFileSync(settingsPath, 'utf-8');
-          res.json(JSON.parse(content));
+          const settings = JSON.parse(content);
+          // デフォルト値とマージ
+          res.json({
+            discord: {
+              info: true,
+              success: true,
+              warning: true,
+              error: true,
+              critical: true,
+              audit: false,
+              suggestionResponse: true,
+              ...settings.discord,
+            },
+            items: { ...defaultItems, ...(settings.items || {}) },
+          });
         } else {
           // デフォルト設定を返す
           res.json({
@@ -358,6 +396,7 @@ export class DashboardServer {
               audit: false,
               suggestionResponse: true,
             },
+            items: defaultItems,
           });
         }
       } catch (error) {
@@ -365,14 +404,21 @@ export class DashboardServer {
       }
     });
 
+    // 通知項目メタデータ取得 API
+    this.app.get('/api/notifications/items', (req: Request, res: Response) => {
+      res.json({
+        items: NOTIFICATION_ITEMS,
+        categories: NOTIFICATION_CATEGORIES,
+      });
+    });
+
     // 通知設定更新 API
     this.app.post('/api/notifications/settings', (req: Request, res: Response) => {
       try {
-        const workspaceDir = join(process.cwd(), 'workspace');
-        const settingsPath = join(workspaceDir, 'notification-settings.json');
+        const settingsPath = join(ORCHESTRATOR_WORKSPACE, 'notification-settings.json');
 
-        if (!existsSync(workspaceDir)) {
-          mkdirSync(workspaceDir, { recursive: true });
+        if (!existsSync(ORCHESTRATOR_WORKSPACE)) {
+          mkdirSync(ORCHESTRATOR_WORKSPACE, { recursive: true });
         }
 
         writeFileSync(settingsPath, JSON.stringify(req.body, null, 2));
@@ -385,7 +431,7 @@ export class DashboardServer {
     // 通知履歴取得 API
     this.app.get('/api/notifications/history', (req: Request, res: Response) => {
       try {
-        const historyPath = join(process.cwd(), 'workspace', 'notification-history.json');
+        const historyPath = join(ORCHESTRATOR_WORKSPACE, 'notification-history.json');
         if (existsSync(historyPath)) {
           const content = readFileSync(historyPath, 'utf-8');
           res.json(JSON.parse(content));
