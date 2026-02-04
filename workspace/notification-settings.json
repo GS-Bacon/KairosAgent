@@ -1,0 +1,10 @@
+{
+  "discord": {
+    "info": false,
+    "success": false,
+    "warning": false,
+    "error": true,
+    "critical": true,
+    "audit": false
+  }
+}

@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoClaudeKMP Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #333;
+    }
+
+    h1 {
+      font-size: 24px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #2ecc71;
+    }
+
+    .status-dot.warning {
+      background: #f1c40f;
+    }
+
+    .status-dot.error {
+      background: #e74c3c;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: #16213e;
+      border: none;
+      border-radius: 8px;
+      color: #888;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .tab.active {
+      background: #0f3460;
+      color: #fff;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .card.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .card h2 {
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 15px;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .stat-value.positive {
+      color: #2ecc71;
+    }
+
+    .stat-value.negative {
+      color: #e74c3c;
+    }
+
+    .request-list {
+      list-style: none;
+    }
+
+    .request-item {
+      background: #1a1a2e;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+    }
+
+    .request-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .request-description {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .request-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-approve {
+      background: #2ecc71;
+      color: white;
+    }
+
+    .btn-reject {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .btn-primary {
+      background: #3498db;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #555;
+      color: white;
+    }
+
+    .activity-list {
+      list-style: none;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .activity-item {
+      display: flex;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .activity-time {
+      color: #888;
+      font-size: 12px;
+      min-width: 60px;
+    }
+
+    .activity-icon {
+      width: 20px;
+    }
+
+    .activity-text {
+      flex: 1;
+      font-size: 14px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #888;
+    }
+
+    /* 提案フォーム */
+    .suggestion-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group label {
+      color: #888;
+      font-size: 14px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      padding: 10px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #1a1a2e;
+      color: #eee;
+      font-size: 14px;
+    }
+
+    .form-group textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 15px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    /* 提案一覧 */
+    .suggestion-list {
+      list-style: none;
+    }
+
+    .suggestion-item {
+      background: #1a1a2e;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+    }
+
+    .suggestion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .suggestion-title {
+      font-weight: bold;
+    }
+
+    .suggestion-status {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .status-pending { background: #f1c40f; color: #000; }
+    .status-reviewing { background: #3498db; color: #fff; }
+    .status-accepted { background: #2ecc71; color: #fff; }
+    .status-rejected { background: #e74c3c; color: #fff; }
+    .status-implemented { background: #9b59b6; color: #fff; }
+    .status-deferred { background: #95a5a6; color: #fff; }
+
+    .suggestion-content {
+      color: #aaa;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .suggestion-response {
+      background: #0f3460;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    .suggestion-response h4 {
+      color: #3498db;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .suggestion-response p {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .suggestion-meta {
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .badge-feature { background: #3498db33; color: #3498db; }
+    .badge-bug { background: #e74c3c33; color: #e74c3c; }
+    .badge-improvement { background: #2ecc7133; color: #2ecc71; }
+    .badge-question { background: #9b59b633; color: #9b59b6; }
+    .badge-other { background: #95a5a633; color: #95a5a6; }
+
+    .badge-low { background: #2ecc7133; color: #2ecc71; }
+    .badge-medium { background: #f1c40f33; color: #f1c40f; }
+    .badge-high { background: #e74c3c33; color: #e74c3c; }
+
+    /* レポート */
+    .report-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .report-tab {
+      padding: 8px 16px;
+      background: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .report-tab.active {
+      background: #0f3460;
+      color: #fff;
+    }
+
+    .report-content {
+      display: none;
+    }
+
+    .report-content.active {
+      display: block;
+    }
+
+    .report-item {
+      background: #1a1a2e;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+
+    .report-date {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      color: #3498db;
+    }
+
+    .report-summary {
+      color: #aaa;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    .report-section {
+      margin-bottom: 15px;
+    }
+
+    .report-section h4 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .report-section ul {
+      list-style: none;
+      padding-left: 20px;
+    }
+
+    .report-section li {
+      font-size: 14px;
+      margin-bottom: 4px;
+      position: relative;
+    }
+
+    .report-section li::before {
+      content: "•";
+      position: absolute;
+      left: -15px;
+      color: #555;
+    }
+
+    .report-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .report-stat {
+      text-align: center;
+      padding: 10px;
+      background: #0f3460;
+      border-radius: 6px;
+    }
+
+    .report-stat-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .report-stat-label {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .report-finance {
+      display: flex;
+      justify-content: space-around;
+      padding: 15px;
+      background: #0f3460;
+      border-radius: 6px;
+    }
+
+    .report-finance-item {
+      text-align: center;
+    }
+
+    .report-finance-value {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .report-finance-label {
+      font-size: 12px;
+      color: #888;
+    }
+
+    /* スケジュールタスク */
+    .scheduler-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .scheduler-table th,
+    .scheduler-table td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+    }
+
+    .scheduler-table th {
+      color: #888;
+      font-size: 12px;
+      font-weight: normal;
+    }
+
+    .scheduler-table td {
+      font-size: 14px;
+    }
+
+    .task-status-enabled {
+      color: #2ecc71;
+    }
+
+    .task-status-disabled {
+      color: #e74c3c;
+    }
+
+    .scheduler-update-time {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 10px;
+    }
+
+    /* 通知設定 */
+    .notification-setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .notification-setting-item:last-child {
+      border-bottom: none;
+    }
+
+    .notification-type-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .notification-type-icon {
+      width: 24px;
+      text-align: center;
+    }
+
+    .notification-type-name {
+      font-weight: bold;
+    }
+
+    .notification-type-desc {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 26px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #555;
+      transition: .3s;
+      border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #2ecc71;
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(24px);
+    }
+
+    /* 通知履歴 */
+    .notification-history-item {
+      display: flex;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+    }
+
+    .notification-history-icon {
+      width: 24px;
+      text-align: center;
+    }
+
+    .notification-history-content {
+      flex: 1;
+    }
+
+    .notification-history-title {
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .notification-history-desc {
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .notification-history-meta {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .notification-sent {
+      color: #2ecc71;
+    }
+
+    .notification-skipped {
+      color: #f1c40f;
+    }
+
+    .notification-failed {
+      color: #e74c3c;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>AutoClaudeKMP Dashboard</h1>
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">接続中...</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard')">ダッシュボード</button>
+    <button class="tab" onclick="switchTab('suggestions')">意見・提案</button>
+    <button class="tab" onclick="switchTab('reports')">レポート</button>
+    <button class="tab" onclick="switchTab('notifications')">通知設定</button>
+  </div>
+
+  <!-- ダッシュボードタブ -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="grid">
+      <div class="card">
+        <h2>現在のタスク</h2>
+        <div id="currentTask">
+          <div class="loading">タスクを取得中...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>収益状況</h2>
+        <div id="finance">
+          <div class="stat">
+            <span>今月の収入</span>
+            <span class="stat-value positive" id="monthlyIncome">-</span>
+          </div>
+          <div class="stat">
+            <span>今月の支出</span>
+            <span class="stat-value negative" id="monthlyExpense">-</span>
+          </div>
+          <div class="stat">
+            <span>純利益</span>
+            <span class="stat-value" id="netProfit">-</span>
+          </div>
+          <div class="stat">
+            <span>残り予算</span>
+            <span class="stat-value" id="remainingBudget">-</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>承認待ちリクエスト</h2>
+        <ul class="request-list" id="requestList">
+          <li class="loading">リクエストを取得中...</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>最近のアクティビティ</h2>
+        <ul class="activity-list" id="activityList">
+          <li class="loading">アクティビティを取得中...</li>
+        </ul>
+      </div>
+
+      <div class="card full-width">
+        <h2>スケジュールタスク</h2>
+        <div class="scheduler-update-time" id="schedulerUpdateTime">最終更新: 取得中...</div>
+        <table class="scheduler-table">
+          <thead>
+            <tr>
+              <th>タスク名</th>
+              <th>次回実行</th>
+              <th>最終実行</th>
+              <th>間隔</th>
+              <th>状態</th>
+            </tr>
+          </thead>
+          <tbody id="schedulerTasks">
+            <tr><td colspan="5" class="loading">タスクを取得中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 意見・提案タブ -->
+  <div id="tab-suggestions" class="tab-content">
+    <div class="grid">
+      <div class="card">
+        <h2>新しい提案を投稿</h2>
+        <form class="suggestion-form" onsubmit="submitSuggestion(event)">
+          <div class="form-group">
+            <label for="suggestionTitle">タイトル</label>
+            <input type="text" id="suggestionTitle" placeholder="提案のタイトル" required>
+          </div>
+          <div class="form-group">
+            <label for="suggestionContent">内容</label>
+            <textarea id="suggestionContent" placeholder="提案の詳細を記入してください" required></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="suggestionCategory">カテゴリ</label>
+              <select id="suggestionCategory">
+                <option value="feature">機能追加</option>
+                <option value="improvement">改善</option>
+                <option value="bug">バグ報告</option>
+                <option value="question">質問</option>
+                <option value="other">その他</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="suggestionPriority">優先度</label>
+              <select id="suggestionPriority">
+                <option value="low">低</option>
+                <option value="medium" selected>中</option>
+                <option value="high">高</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary">提案を送信</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>提案一覧</h2>
+        <ul class="suggestion-list" id="suggestionList">
+          <li class="loading">提案を取得中...</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通知設定タブ -->
+  <div id="tab-notifications" class="tab-content">
+    <div class="grid">
+      <div class="card">
+        <h2>Discord通知設定</h2>
+        <div id="notificationSettings">
+          <div class="loading">設定を取得中...</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>通知履歴</h2>
+        <div id="notificationHistory" style="max-height: 400px; overflow-y: auto;">
+          <div class="loading">履歴を取得中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- レポートタブ -->
+  <div id="tab-reports" class="tab-content">
+    <div class="card full-width">
+      <h2>レポート</h2>
+      <div class="report-tabs">
+        <button class="report-tab active" onclick="switchReportTab('daily')">日報</button>
+        <button class="report-tab" onclick="switchReportTab('weekly')">週報</button>
+      </div>
+
+      <div id="report-daily" class="report-content active">
+        <div id="dailyReportList">
+          <div class="loading">日報を取得中...</div>
+        </div>
+      </div>
+
+      <div id="report-weekly" class="report-content">
+        <div id="weeklyReportList">
+          <div class="loading">週報を取得中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+
+    // タブ切り替え
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+      document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+
+      // データ再取得
+      if (tabName === 'suggestions') {
+        fetchSuggestions();
+      } else if (tabName === 'reports') {
+        fetchDailyReports();
+        fetchWeeklyReports();
+      } else if (tabName === 'notifications') {
+        fetchNotificationSettings();
+        fetchNotificationHistory();
+      }
+    }
+
+    function switchReportTab(type) {
+      document.querySelectorAll('.report-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.report-content').forEach(t => t.classList.remove('active'));
+
+      document.querySelector(`.report-tab[onclick="switchReportTab('${type}')"]`).classList.add('active');
+      document.getElementById(`report-${type}`).classList.add('active');
+    }
+
+    // WebSocket接続
+    let ws;
+    function connectWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+      ws.onopen = () => {
+        document.getElementById('statusDot').className = 'status-dot';
+        document.getElementById('statusText').textContent = '稼働中';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statusDot').className = 'status-dot error';
+        document.getElementById('statusText').textContent = '切断';
+        setTimeout(connectWebSocket, 5000);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+      };
+    }
+
+    function handleWebSocketMessage(data) {
+      if (data.type === 'task') {
+        updateCurrentTask(data.data);
+      } else if (data.type === 'finance') {
+        fetchFinance();
+      }
+    }
+
+    // データ取得
+    async function fetchStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/status`);
+        const data = await res.json();
+        updateStatus(data);
+      } catch (error) {
+        console.error('Failed to fetch status:', error);
+      }
+    }
+
+    async function fetchFinance() {
+      try {
+        const res = await fetch(`${API_BASE}/api/finance`);
+        const data = await res.json();
+        updateFinance(data);
+      } catch (error) {
+        console.error('Failed to fetch finance:', error);
+      }
+    }
+
+    async function fetchRequests() {
+      try {
+        const res = await fetch(`${API_BASE}/api/requests`);
+        const data = await res.json();
+        updateRequests(data);
+      } catch (error) {
+        console.error('Failed to fetch requests:', error);
+      }
+    }
+
+    async function fetchCurrentTask() {
+      try {
+        const res = await fetch(`${API_BASE}/api/task`);
+        const data = await res.json();
+        updateCurrentTask(data);
+      } catch (error) {
+        console.error('Failed to fetch current task:', error);
+      }
+    }
+
+    async function fetchActivity() {
+      try {
+        const res = await fetch(`${API_BASE}/api/activity`);
+        const data = await res.json();
+        updateActivity(data);
+      } catch (error) {
+        console.error('Failed to fetch activity:', error);
+      }
+    }
+
+    async function fetchSuggestions() {
+      try {
+        const res = await fetch(`${API_BASE}/api/suggestions`);
+        const data = await res.json();
+        updateSuggestions(data);
+      } catch (error) {
+        console.error('Failed to fetch suggestions:', error);
+      }
+    }
+
+    async function fetchDailyReports() {
+      try {
+        const res = await fetch(`${API_BASE}/api/reports/daily?limit=7`);
+        const data = await res.json();
+        updateDailyReports(data);
+      } catch (error) {
+        console.error('Failed to fetch daily reports:', error);
+      }
+    }
+
+    async function fetchWeeklyReports() {
+      try {
+        const res = await fetch(`${API_BASE}/api/reports/weekly?limit=4`);
+        const data = await res.json();
+        updateWeeklyReports(data);
+      } catch (error) {
+        console.error('Failed to fetch weekly reports:', error);
+      }
+    }
+
+    async function fetchSchedulerTasks() {
+      try {
+        const res = await fetch(`${API_BASE}/api/scheduler`);
+        const data = await res.json();
+        updateSchedulerTasks(data);
+      } catch (error) {
+        console.error('Failed to fetch scheduler tasks:', error);
+      }
+    }
+
+    async function fetchNotificationSettings() {
+      try {
+        const res = await fetch(`${API_BASE}/api/notifications/settings`);
+        const data = await res.json();
+        updateNotificationSettings(data);
+      } catch (error) {
+        console.error('Failed to fetch notification settings:', error);
+      }
+    }
+
+    async function fetchNotificationHistory() {
+      try {
+        const res = await fetch(`${API_BASE}/api/notifications/history`);
+        const data = await res.json();
+        updateNotificationHistory(data);
+      } catch (error) {
+        console.error('Failed to fetch notification history:', error);
+      }
+    }
+
+    // UI更新
+    function updateStatus(data) {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+
+      if (data.state === 'healthy') {
+        dot.className = 'status-dot';
+        text.textContent = '稼働中';
+      } else if (data.state === 'degraded') {
+        dot.className = 'status-dot warning';
+        text.textContent = '劣化';
+      } else {
+        dot.className = 'status-dot error';
+        text.textContent = data.state;
+      }
+    }
+
+    function updateFinance(data) {
+      document.getElementById('monthlyIncome').textContent = `¥${data.monthlyIncome.toLocaleString()}`;
+      document.getElementById('monthlyExpense').textContent = `¥${data.monthlyExpense.toLocaleString()}`;
+
+      const netProfit = document.getElementById('netProfit');
+      netProfit.textContent = `¥${data.netProfit.toLocaleString()}`;
+      netProfit.className = data.netProfit >= 0 ? 'stat-value positive' : 'stat-value negative';
+
+      document.getElementById('remainingBudget').textContent = `¥${data.remainingBudget.toLocaleString()}`;
+    }
+
+    function updateCurrentTask(task) {
+      const container = document.getElementById('currentTask');
+      if (task && task.status !== 'idle') {
+        container.innerHTML = `
+          <div class="stat">
+            <span>${task.description || task.message}</span>
+            <span>${task.status}</span>
+          </div>
+        `;
+      } else {
+        container.innerHTML = '<div class="loading">現在実行中のタスクはありません</div>';
+      }
+    }
+
+    function updateRequests(requests) {
+      const list = document.getElementById('requestList');
+
+      if (requests.length === 0) {
+        list.innerHTML = '<li class="loading">承認待ちのリクエストはありません</li>';
+        return;
+      }
+
+      list.innerHTML = requests.map(req => `
+        <li class="request-item">
+          <div class="request-title">${escapeHtml(req.title)}</div>
+          <div class="request-description">${escapeHtml(req.description)}</div>
+          <div class="request-actions">
+            <button class="btn-approve" onclick="approveRequest('${req.id}')">承認</button>
+            <button class="btn-reject" onclick="rejectRequest('${req.id}')">拒否</button>
+          </div>
+        </li>
+      `).join('');
+    }
+
+    function updateActivity(activities) {
+      const list = document.getElementById('activityList');
+
+      if (!activities || activities.length === 0) {
+        list.innerHTML = '<li class="loading">アクティビティはありません</li>';
+        return;
+      }
+
+      list.innerHTML = activities.map(activity => {
+        const time = new Date(activity.timestamp);
+        const timeStr = time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        const icon = activity.success ? '✓' : '✗';
+
+        return `
+          <li class="activity-item">
+            <span class="activity-time">${timeStr}</span>
+            <span class="activity-icon">${icon}</span>
+            <span class="activity-text">${escapeHtml(activity.description || activity.actionType)}</span>
+          </li>
+        `;
+      }).join('');
+    }
+
+    function updateSuggestions(suggestions) {
+      const list = document.getElementById('suggestionList');
+
+      if (!suggestions || suggestions.length === 0) {
+        list.innerHTML = '<li class="loading">提案はまだありません</li>';
+        return;
+      }
+
+      list.innerHTML = suggestions.map(s => {
+        const responseHtml = s.systemResponse ? `
+          <div class="suggestion-response">
+            <h4>システムの回答</h4>
+            <p><strong>分析:</strong> ${escapeHtml(s.systemResponse.analysis)}</p>
+            <p><strong>判断:</strong> ${escapeHtml(s.systemResponse.decision)}</p>
+            ${s.systemResponse.actionPlan ? `<p><strong>アクションプラン:</strong> ${escapeHtml(s.systemResponse.actionPlan)}</p>` : ''}
+          </div>
+        ` : '';
+
+        return `
+          <li class="suggestion-item">
+            <div class="suggestion-header">
+              <span class="suggestion-title">${escapeHtml(s.title)}</span>
+              <span class="suggestion-status status-${s.status}">${getStatusLabel(s.status)}</span>
+            </div>
+            <div class="suggestion-content">${escapeHtml(s.content)}</div>
+            <div class="suggestion-meta">
+              <span class="badge badge-${s.category}">${getCategoryLabel(s.category)}</span>
+              <span class="badge badge-${s.priority}">${getPriorityLabel(s.priority)}</span>
+              <span>${formatDate(s.createdAt)}</span>
+            </div>
+            ${responseHtml}
+          </li>
+        `;
+      }).join('');
+    }
+
+    function updateDailyReports(reports) {
+      const container = document.getElementById('dailyReportList');
+
+      if (!reports || reports.length === 0) {
+        container.innerHTML = '<div class="loading">日報はまだありません</div>';
+        return;
+      }
+
+      container.innerHTML = reports.map(report => `
+        <div class="report-item">
+          <div class="report-date">${report.date}</div>
+          <div class="report-summary">${escapeHtml(report.summary)}</div>
+
+          <div class="report-stats">
+            <div class="report-stat">
+              <div class="report-stat-value">${report.activities.tasksCompleted}</div>
+              <div class="report-stat-label">完了タスク</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-value">${report.activities.strategiesRun}</div>
+              <div class="report-stat-label">戦略実行</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-value">${report.activities.suggestionsProcessed}</div>
+              <div class="report-stat-label">提案処理</div>
+            </div>
+          </div>
+
+          ${report.accomplishments.length > 0 ? `
+          <div class="report-section">
+            <h4>✅ やったこと</h4>
+            <ul>${report.accomplishments.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          ${report.failures.length > 0 ? `
+          <div class="report-section">
+            <h4>❌ 失敗</h4>
+            <ul>${report.failures.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          ${report.improvements.length > 0 ? `
+          <div class="report-section">
+            <h4>📈 改善</h4>
+            <ul>${report.improvements.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          <div class="report-finance">
+            <div class="report-finance-item">
+              <div class="report-finance-value positive">¥${report.financials.income.toLocaleString()}</div>
+              <div class="report-finance-label">収入</div>
+            </div>
+            <div class="report-finance-item">
+              <div class="report-finance-value negative">¥${report.financials.expense.toLocaleString()}</div>
+              <div class="report-finance-label">支出</div>
+            </div>
+            <div class="report-finance-item">
+              <div class="report-finance-value ${report.financials.net >= 0 ? 'positive' : 'negative'}">¥${report.financials.net.toLocaleString()}</div>
+              <div class="report-finance-label">収支</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateSchedulerTasks(data) {
+      const tbody = document.getElementById('schedulerTasks');
+      const updateTime = document.getElementById('schedulerUpdateTime');
+
+      if (data.timestamp) {
+        updateTime.textContent = `最終更新: ${formatRelativeTime(data.timestamp)}`;
+      } else {
+        updateTime.textContent = '最終更新: データなし';
+      }
+
+      if (!data.tasks || data.tasks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="loading">スケジュールタスクはありません</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.tasks.map(task => `
+        <tr>
+          <td>${escapeHtml(task.name)}</td>
+          <td>${task.nextRun ? formatRelativeTime(task.nextRun) : '-'}</td>
+          <td>${task.lastRun ? formatRelativeTime(task.lastRun) : '-'}</td>
+          <td>${formatInterval(task.intervalMs, task.cronExpression)}</td>
+          <td class="${task.enabled ? 'task-status-enabled' : 'task-status-disabled'}">
+            ${task.enabled ? '✓ 有効' : '✗ 無効'}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function updateNotificationSettings(settings) {
+      const container = document.getElementById('notificationSettings');
+
+      const types = [
+        { key: 'info', icon: 'info', name: '情報', desc: 'ハートビート、ステータス更新など' },
+        { key: 'success', icon: 'check_circle', name: '成功', desc: '起動完了、タスク完了など' },
+        { key: 'warning', icon: 'warning', name: '警告', desc: 'リソース警告など' },
+        { key: 'error', icon: 'error', name: 'エラー', desc: '処理エラーなど' },
+        { key: 'critical', icon: 'priority_high', name: '重大', desc: '緊急対応が必要なエラー' },
+        { key: 'audit', icon: 'assignment', name: '監査', desc: '監査ログ（通常無効）' },
+      ];
+
+      const typeIcons = {
+        info: '&#x2139;&#xFE0F;',
+        success: '&#x2705;',
+        warning: '&#x26A0;&#xFE0F;',
+        error: '&#x274C;',
+        critical: '&#x1F6A8;',
+        audit: '&#x1F4CB;',
+      };
+
+      container.innerHTML = types.map(type => `
+        <div class="notification-setting-item">
+          <div class="notification-type-info">
+            <span class="notification-type-icon">${typeIcons[type.key]}</span>
+            <div>
+              <div class="notification-type-name">${type.name}</div>
+              <div class="notification-type-desc">${type.desc}</div>
+            </div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" ${settings.discord[type.key] ? 'checked' : ''} onchange="updateNotificationSetting('${type.key}', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      `).join('');
+    }
+
+    function updateNotificationHistory(history) {
+      const container = document.getElementById('notificationHistory');
+
+      if (!history || history.length === 0) {
+        container.innerHTML = '<div class="loading">通知履歴はありません</div>';
+        return;
+      }
+
+      const typeIcons = {
+        info: '&#x2139;&#xFE0F;',
+        success: '&#x2705;',
+        warning: '&#x26A0;&#xFE0F;',
+        error: '&#x274C;',
+        critical: '&#x1F6A8;',
+        audit: '&#x1F4CB;',
+      };
+
+      container.innerHTML = history.map(item => `
+        <div class="notification-history-item">
+          <span class="notification-history-icon">${typeIcons[item.type] || ''}</span>
+          <div class="notification-history-content">
+            <div class="notification-history-title">${escapeHtml(item.title)}</div>
+            ${item.description ? `<div class="notification-history-desc">${escapeHtml(item.description)}</div>` : ''}
+            <div class="notification-history-meta">
+              <span>${formatDate(item.timestamp)}</span>
+              <span class="${item.sent ? 'notification-sent' : (item.reason ? 'notification-skipped' : 'notification-failed')}">
+                ${item.sent ? '送信済み' : (item.reason || '失敗')}
+              </span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateWeeklyReports(reports) {
+      const container = document.getElementById('weeklyReportList');
+
+      if (!reports || reports.length === 0) {
+        container.innerHTML = '<div class="loading">週報はまだありません</div>';
+        return;
+      }
+
+      container.innerHTML = reports.map(report => `
+        <div class="report-item">
+          <div class="report-date">${report.week} (${report.startDate} - ${report.endDate})</div>
+          <div class="report-summary">${escapeHtml(report.summary)}</div>
+
+          <div class="report-stats">
+            <div class="report-stat">
+              <div class="report-stat-value">${report.totals.tasksCompleted}</div>
+              <div class="report-stat-label">完了タスク</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-value">${report.totals.strategiesRun}</div>
+              <div class="report-stat-label">戦略実行</div>
+            </div>
+            <div class="report-stat">
+              <div class="report-stat-value">${report.totals.suggestionsProcessed}</div>
+              <div class="report-stat-label">提案処理</div>
+            </div>
+          </div>
+
+          ${report.highlights.length > 0 ? `
+          <div class="report-section">
+            <h4>✨ ハイライト</h4>
+            <ul>${report.highlights.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          ${report.challenges.length > 0 ? `
+          <div class="report-section">
+            <h4>⚠️ 課題</h4>
+            <ul>${report.challenges.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          ${report.learnings.length > 0 ? `
+          <div class="report-section">
+            <h4>📚 学び</h4>
+            <ul>${report.learnings.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
+          </div>
+          ` : ''}
+
+          <div class="report-finance">
+            <div class="report-finance-item">
+              <div class="report-finance-value positive">¥${report.totals.income.toLocaleString()}</div>
+              <div class="report-finance-label">週間収入</div>
+            </div>
+            <div class="report-finance-item">
+              <div class="report-finance-value negative">¥${report.totals.expense.toLocaleString()}</div>
+              <div class="report-finance-label">週間支出</div>
+            </div>
+            <div class="report-finance-item">
+              <div class="report-finance-value ${report.totals.net >= 0 ? 'positive' : 'negative'}">¥${report.totals.net.toLocaleString()}</div>
+              <div class="report-finance-label">週間収支</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // アクション
+    async function approveRequest(id) {
+      try {
+        await fetch(`${API_BASE}/api/requests/${id}/approve`, { method: 'POST' });
+        fetchRequests();
+      } catch (error) {
+        console.error('Failed to approve:', error);
+      }
+    }
+
+    async function rejectRequest(id) {
+      const reason = prompt('拒否理由を入力してください:');
+      if (reason === null) return;
+
+      try {
+        await fetch(`${API_BASE}/api/requests/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        fetchRequests();
+      } catch (error) {
+        console.error('Failed to reject:', error);
+      }
+    }
+
+    async function submitSuggestion(event) {
+      event.preventDefault();
+
+      const title = document.getElementById('suggestionTitle').value;
+      const content = document.getElementById('suggestionContent').value;
+      const category = document.getElementById('suggestionCategory').value;
+      const priority = document.getElementById('suggestionPriority').value;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/suggestions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, content, category, priority }),
+        });
+
+        if (res.ok) {
+          // フォームをリセット
+          document.getElementById('suggestionTitle').value = '';
+          document.getElementById('suggestionContent').value = '';
+          document.getElementById('suggestionCategory').value = 'feature';
+          document.getElementById('suggestionPriority').value = 'medium';
+
+          // 提案一覧を更新
+          fetchSuggestions();
+
+          alert('提案が送信されました。次のハートビートで回答されます。');
+        } else {
+          alert('提案の送信に失敗しました。');
+        }
+      } catch (error) {
+        console.error('Failed to submit suggestion:', error);
+        alert('提案の送信に失敗しました。');
+      }
+    }
+
+    async function updateNotificationSetting(type, enabled) {
+      try {
+        // 現在の設定を取得
+        const res = await fetch(`${API_BASE}/api/notifications/settings`);
+        const settings = await res.json();
+
+        // 設定を更新
+        settings.discord[type] = enabled;
+
+        // 保存
+        await fetch(`${API_BASE}/api/notifications/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+      } catch (error) {
+        console.error('Failed to update notification setting:', error);
+        alert('設定の更新に失敗しました。');
+        // チェックボックスを元に戻す
+        fetchNotificationSettings();
+      }
+    }
+
+    // ユーティリティ
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function getStatusLabel(status) {
+      const labels = {
+        pending: '未処理',
+        reviewing: '検討中',
+        accepted: '採択',
+        rejected: '却下',
+        implemented: '実装済',
+        deferred: '保留',
+      };
+      return labels[status] || status;
+    }
+
+    function getCategoryLabel(category) {
+      const labels = {
+        feature: '機能追加',
+        bug: 'バグ',
+        improvement: '改善',
+        question: '質問',
+        other: 'その他',
+      };
+      return labels[category] || category;
+    }
+
+    function getPriorityLabel(priority) {
+      const labels = {
+        low: '低',
+        medium: '中',
+        high: '高',
+      };
+      return labels[priority] || priority;
+    }
+
+    function formatRelativeTime(dateStr) {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = date.getTime() - now.getTime();
+      const diffMins = Math.round(diffMs / 60000);
+      const diffHours = Math.round(diffMs / 3600000);
+      const diffDays = Math.round(diffMs / 86400000);
+
+      if (diffMs > 0) {
+        // 未来
+        if (diffMins < 60) return `${diffMins}分後`;
+        if (diffHours < 24) return `${diffHours}時間後`;
+        if (diffDays === 1) return '明日';
+        return `${diffDays}日後`;
+      } else {
+        // 過去
+        const absMins = Math.abs(diffMins);
+        const absHours = Math.abs(diffHours);
+        const absDays = Math.abs(diffDays);
+        if (absMins < 60) return `${absMins}分前`;
+        if (absHours < 24) return `${absHours}時間前`;
+        if (absDays === 1) return '昨日';
+        return `${absDays}日前`;
+      }
+    }
+
+    function formatInterval(intervalMs, cronExpression) {
+      if (intervalMs) {
+        const mins = Math.floor(intervalMs / 60000);
+        const hours = Math.floor(mins / 60);
+        if (hours > 0) return `${hours}時間ごと`;
+        return `${mins}分ごと`;
+      }
+      if (cronExpression) {
+        return cronExpression;
+      }
+      return '-';
+    }
+
+    // 初期化
+    connectWebSocket();
+    fetchStatus();
+    fetchFinance();
+    fetchRequests();
+    fetchCurrentTask();
+    fetchActivity();
+    fetchSchedulerTasks();
+
+    // 定期更新
+    setInterval(fetchStatus, 60000);
+    setInterval(fetchFinance, 60000);
+    setInterval(fetchRequests, 30000);
+    setInterval(fetchCurrentTask, 10000);
+    setInterval(fetchActivity, 30000);
+    setInterval(fetchSchedulerTasks, 60000);
+  </script>
+</body>
+</html>

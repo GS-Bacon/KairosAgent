@@ -1,0 +1,22 @@
+export declare function generateId(prefix?: string): string;
+export declare function sleep(ms: number): Promise<void>;
+export declare function formatJPY(amount: number): string;
+export declare function formatDate(date: Date): string;
+export declare function formatDateTime(date: Date): string;
+export declare function parseDate(dateStr: string): Date;
+export declare function daysBetween(date1: Date, date2: Date): number;
+export declare function isToday(date: Date): boolean;
+export declare function getMonthKey(date?: Date): string;
+export declare function clamp(value: number, min: number, max: number): number;
+export declare function retry<T>(fn: () => Promise<T>, maxAttempts?: number, delayMs?: number, backoffMultiplier?: number): Promise<T>;
+export declare function truncate(str: string, maxLength: number): string;
+export declare function safeJsonParse<T>(json: string, defaultValue: T): T;
+export declare function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K>;
+export declare function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K>;
+export declare function debounce<T extends (...args: unknown[]) => unknown>(fn: T, delayMs: number): (...args: Parameters<T>) => void;
+export declare function throttle<T extends (...args: unknown[]) => unknown>(fn: T, limitMs: number): (...args: Parameters<T>) => void;
+export declare function groupBy<T, K extends string | number>(items: T[], keyFn: (item: T) => K): Record<K, T[]>;
+export declare function sum(numbers: number[]): number;
+export declare function average(numbers: number[]): number;
+export declare function percentile(numbers: number[], p: number): number;
+//# sourceMappingURL=utils.d.ts.map

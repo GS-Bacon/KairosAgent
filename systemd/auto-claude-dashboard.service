@@ -1,0 +1,24 @@
+[Unit]
+Description=AutoClaudeKMP Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=bacon
+WorkingDirectory=/home/bacon/AutoClaudeKMP
+ExecStart=/home/bacon/.nvm/versions/node/v22.21.1/bin/node /home/bacon/AutoClaudeKMP/apps/dashboard/dist/index.js
+Restart=on-failure
+RestartSec=10
+
+# 環境変数
+Environment=NODE_ENV=production
+Environment=DASHBOARD_PORT=3000
+Environment=DASHBOARD_HOST=0.0.0.0
+
+# ログ
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=auto-claude-dashboard
+
+[Install]
+WantedBy=multi-user.target

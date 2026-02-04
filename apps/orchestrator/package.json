@@ -1,0 +1,24 @@
+{
+  "name": "@auto-claude/orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "start": "node --enable-source-maps ./dist/index.js"
+  },
+  "dependencies": {
+    "@auto-claude/core": "workspace:*",
+    "@auto-claude/safety": "workspace:*",
+    "@auto-claude/backup": "workspace:*",
+    "@auto-claude/audit": "workspace:*",
+    "@auto-claude/notification": "workspace:*",
+    "@auto-claude/memory": "workspace:*",
+    "@auto-claude/ledger": "workspace:*",
+    "@auto-claude/ai-router": "workspace:*",
+    "@auto-claude/self-improve": "workspace:*",
+    "@auto-claude/strategies": "workspace:*",
+    "@auto-claude/github": "workspace:*"
+  }
+}

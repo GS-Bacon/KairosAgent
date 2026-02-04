@@ -1,0 +1,19 @@
+{
+  "name": "@auto-claude/self-improve",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@auto-claude/core": "workspace:*",
+    "@auto-claude/ai-router": "workspace:*",
+    "@auto-claude/notification": "workspace:*",
+    "@auto-claude/backup": "workspace:*",
+    "@auto-claude/audit": "workspace:*",
+    "@auto-claude/ledger": "workspace:*"
+  }
+}

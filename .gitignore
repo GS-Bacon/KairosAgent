@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+auth/
+*.key
+*.pem
+*credentials*
+*secret*
+
+# Private workspace data
+workspace/ledger/
+workspace/audit/
+workspace/approvals/
+workspace/logs/
+workspace/PROBLEMS.jsonl
+workspace/ROOT_CAUSES.jsonl
+workspace/IMPROVEMENTS.jsonl
+workspace/SYSTEM_STATUS.json
+config.json
+
+# Backups (contain sensitive data)
+backups/
+
+# Sandbox test environment
+sandbox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+.tmp/

@@ -1,0 +1,29 @@
+{
+  "name": "auto-claude-kmp",
+  "version": "0.1.0",
+  "description": "AIが自律的に収益を稼ぎ、自己改善を続けるシステム",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest",
+    "start": "pnpm --filter orchestrator start",
+    "dashboard": "pnpm --filter dashboard start"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0"
+  }
+}

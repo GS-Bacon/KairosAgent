@@ -1,0 +1,27 @@
+[Unit]
+Description=AutoClaudeKMP Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+User=bacon
+WorkingDirectory=/home/bacon/AutoClaudeKMP
+ExecStart=/home/bacon/.nvm/versions/node/v22.21.1/bin/node /home/bacon/AutoClaudeKMP/apps/orchestrator/dist/index.js
+Restart=on-failure
+RestartSec=10
+
+# リソース制限
+CPUQuota=30%
+MemoryMax=2G
+
+# 環境変数
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--enable-source-maps
+
+# ログ
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=auto-claude
+
+[Install]
+WantedBy=multi-user.target

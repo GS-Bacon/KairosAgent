@@ -1,0 +1,24 @@
+{
+  "limits": {
+    "maxLossJPY": 30000,
+    "maxCpuPercent": 30,
+    "maxMemoryMB": 2048,
+    "maxDiskGB": 10,
+    "maxProcesses": 20
+  },
+  "intervals": {
+    "healthCheckMs": 300000,
+    "heartbeatMs": 1800000,
+    "dailyAnalysisHour": 6,
+    "backupHour": 3
+  },
+  "discord": {
+    "webhookUrl": "YOUR_DISCORD_WEBHOOK_URL_HERE"
+  },
+  "paths": {
+    "workspace": "/home/bacon/AutoClaudeKMP/workspace",
+    "backups": "/home/bacon/AutoClaudeKMP/backups",
+    "sandbox": "/home/bacon/AutoClaudeKMP/sandbox",
+    "auth": "/home/bacon/AutoClaudeKMP/auth"
+  }
+}
