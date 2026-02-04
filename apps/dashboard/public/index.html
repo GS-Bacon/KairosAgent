@@ -1067,68 +1067,29 @@
       background: #666;
     }
 
-    /* 戦略詳細モーダル */
-    .strategy-modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.8);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    .strategy-modal-content {
-      background: #1a1a2e;
-      border-radius: 12px;
-      max-width: 900px;
-      width: 95%;
-      max-height: 85vh;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .strategy-modal-header {
+    /* 戦略詳細タブ */
+    .strategy-detail-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 20px;
-      border-bottom: 1px solid #333;
+      margin-bottom: 20px;
     }
 
-    .strategy-modal-header h2 {
+    .strategy-detail-header h2 {
       margin: 0;
       font-size: 20px;
       color: #fff;
     }
 
-    .strategy-modal-close {
-      background: none;
-      border: none;
-      color: #888;
-      font-size: 24px;
-      cursor: pointer;
-      padding: 0;
-      line-height: 1;
-    }
-
-    .strategy-modal-close:hover {
-      color: #fff;
-    }
-
-    .strategy-modal-tabs {
+    .strategy-detail-tabs {
       display: flex;
       gap: 0;
-      padding: 0 20px;
+      margin-bottom: 20px;
       border-bottom: 1px solid #333;
     }
 
-    .strategy-modal-tab {
-      padding: 12px 20px;
+    .strategy-detail-tab {
+      padding: 12px 24px;
       background: none;
       border: none;
       color: #888;
@@ -1136,24 +1097,27 @@
       font-size: 14px;
       border-bottom: 2px solid transparent;
       margin-bottom: -1px;
+      transition: color 0.2s, border-color 0.2s;
     }
 
-    .strategy-modal-tab.active {
+    .strategy-detail-tab:hover {
+      color: #aaa;
+    }
+
+    .strategy-detail-tab.active {
       color: #3498db;
       border-bottom-color: #3498db;
     }
 
-    .strategy-modal-body {
-      padding: 20px;
-      overflow-y: auto;
-      flex: 1;
+    .strategy-detail-body {
+      min-height: 400px;
     }
 
-    .strategy-modal-tab-content {
+    .strategy-section-content {
       display: none;
     }
 
-    .strategy-modal-tab-content.active {
+    .strategy-section-content.active {
       display: block;
     }
 
@@ -1405,6 +1369,7 @@
 
   <div class="tabs">
     <button class="tab active" onclick="switchTab('dashboard')">ダッシュボード</button>
+    <button class="tab" onclick="switchTab('strategy-detail')" id="tabBtnStrategyDetail" style="display: none;">戦略詳細</button>
     <button class="tab" onclick="switchTab('suggestions')">意見・提案</button>
     <button class="tab" onclick="switchTab('reports')">レポート</button>
     <button class="tab" onclick="switchTab('notifications')">通知設定</button>
@@ -1561,6 +1526,30 @@
     </div>
   </div>
 
+  <!-- 戦略詳細タブ -->
+  <div id="tab-strategy-detail" class="tab-content">
+    <div class="card full-width">
+      <div class="strategy-detail-header">
+        <h2 id="strategyDetailTitle">戦略詳細</h2>
+        <button class="btn-secondary" onclick="closeStrategyDetail()">一覧に戻る</button>
+      </div>
+      <div class="strategy-detail-tabs">
+        <button class="strategy-detail-tab active" data-tab="overview" onclick="switchStrategySection('overview')">概要</button>
+        <button class="strategy-detail-tab" data-tab="performance" onclick="switchStrategySection('performance')">パフォーマンス</button>
+        <button class="strategy-detail-tab" data-tab="intermediate" onclick="switchStrategySection('intermediate')">中間結果</button>
+        <button class="strategy-detail-tab" data-tab="steps" onclick="switchStrategySection('steps')">実行ステップ</button>
+        <button class="strategy-detail-tab" data-tab="history" onclick="switchStrategySection('history')">実行履歴</button>
+      </div>
+      <div class="strategy-detail-body">
+        <div id="strategySectionOverview" class="strategy-section-content active"></div>
+        <div id="strategySectionPerformance" class="strategy-section-content"></div>
+        <div id="strategySectionIntermediate" class="strategy-section-content"></div>
+        <div id="strategySectionSteps" class="strategy-section-content"></div>
+        <div id="strategySectionHistory" class="strategy-section-content"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- レポートタブ -->
   <div id="tab-reports" class="tab-content">
     <div class="card full-width">
@@ -1594,35 +1583,6 @@
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeRejectModal()">キャンセル</button>
         <button class="btn-reject" onclick="confirmReject()">拒否する</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 戦略詳細モーダル -->
-  <div id="strategyDetailModal" class="strategy-modal-overlay" style="display: none;">
-    <div class="strategy-modal-content">
-      <div class="strategy-modal-header">
-        <h2 id="strategyModalTitle">戦略詳細</h2>
-        <button class="strategy-modal-close" onclick="closeStrategyModal()">&times;</button>
-      </div>
-      <div class="strategy-modal-tabs">
-        <button class="strategy-modal-tab active" data-tab="overview" onclick="switchStrategyTab('overview')">概要</button>
-        <button class="strategy-modal-tab" data-tab="performance" onclick="switchStrategyTab('performance')">パフォーマンス</button>
-        <button class="strategy-modal-tab" data-tab="intermediate" onclick="switchStrategyTab('intermediate')">中間結果</button>
-        <button class="strategy-modal-tab" data-tab="steps" onclick="switchStrategyTab('steps')">実行ステップ</button>
-        <button class="strategy-modal-tab" data-tab="history" onclick="switchStrategyTab('history')">実行履歴</button>
-      </div>
-      <div class="strategy-modal-body">
-        <!-- 概要タブ -->
-        <div id="strategyTabOverview" class="strategy-modal-tab-content active"></div>
-        <!-- パフォーマンスタブ -->
-        <div id="strategyTabPerformance" class="strategy-modal-tab-content"></div>
-        <!-- 中間結果タブ -->
-        <div id="strategyTabIntermediate" class="strategy-modal-tab-content"></div>
-        <!-- 実行ステップタブ -->
-        <div id="strategyTabSteps" class="strategy-modal-tab-content"></div>
-        <!-- 実行履歴タブ -->
-        <div id="strategyTabHistory" class="strategy-modal-tab-content"></div>
       </div>
     </div>
   </div>
@@ -2559,7 +2519,7 @@
       return '-';
     }
 
-    // 戦略詳細モーダル
+    // 戦略詳細タブ
     let currentStrategyDetail = null;
 
     async function openStrategyDetail(strategyId) {
@@ -2572,11 +2532,15 @@
         const data = await res.json();
         currentStrategyDetail = data;
 
-        document.getElementById('strategyModalTitle').textContent = data.name;
-        document.getElementById('strategyDetailModal').style.display = 'flex';
+        // タブボタンを表示して切り替え
+        document.getElementById('tabBtnStrategyDetail').style.display = 'inline-block';
+        document.getElementById('strategyDetailTitle').textContent = data.name;
 
-        // タブを概要にリセット
-        switchStrategyTab('overview');
+        // 戦略詳細タブに切り替え
+        switchTab('strategy-detail');
+
+        // セクションを概要にリセット
+        switchStrategySection('overview');
         renderStrategyDetail(data);
       } catch (error) {
         console.error('Failed to fetch strategy detail:', error);
@@ -2584,29 +2548,32 @@
       }
     }
 
-    function closeStrategyModal() {
-      document.getElementById('strategyDetailModal').style.display = 'none';
+    function closeStrategyDetail() {
+      // ダッシュボードに戻る
+      switchTab('dashboard');
+      // タブボタンを非表示にする（オプション）
+      // document.getElementById('tabBtnStrategyDetail').style.display = 'none';
       currentStrategyDetail = null;
     }
 
-    function switchStrategyTab(tabName) {
-      document.querySelectorAll('.strategy-modal-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.strategy-modal-tab-content').forEach(t => t.classList.remove('active'));
+    function switchStrategySection(sectionName) {
+      document.querySelectorAll('.strategy-detail-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.strategy-section-content').forEach(t => t.classList.remove('active'));
 
-      document.querySelector(`.strategy-modal-tab[data-tab="${tabName}"]`).classList.add('active');
-      document.getElementById(`strategyTab${capitalizeFirst(tabName)}`).classList.add('active');
+      document.querySelector(`.strategy-detail-tab[data-tab="${sectionName}"]`).classList.add('active');
+      document.getElementById(`strategySection${capitalizeFirst(sectionName)}`).classList.add('active');
     }
 
     function renderStrategyDetail(strategy) {
-      renderOverviewTab(strategy);
-      renderPerformanceTab(strategy);
-      renderIntermediateTab(strategy);
-      renderStepsTab(strategy);
-      renderHistoryTab(strategy);
+      renderOverviewSection(strategy);
+      renderPerformanceSection(strategy);
+      renderIntermediateSection(strategy);
+      renderStepsSection(strategy);
+      renderHistorySection(strategy);
     }
 
-    function renderOverviewTab(strategy) {
-      const container = document.getElementById('strategyTabOverview');
+    function renderOverviewSection(strategy) {
+      const container = document.getElementById('strategySectionOverview');
       const statusLabel = getStrategyStatusLabel(strategy.status);
 
       container.innerHTML = `
@@ -2659,8 +2626,8 @@
       `;
     }
 
-    function renderPerformanceTab(strategy) {
-      const container = document.getElementById('strategyTabPerformance');
+    function renderPerformanceSection(strategy) {
+      const container = document.getElementById('strategySectionPerformance');
       const perf = strategy.performance || {};
       const roi = perf.roi || 0;
       const successRate = strategy.successRate || 0;
@@ -2712,8 +2679,8 @@
       `;
     }
 
-    function renderIntermediateTab(strategy) {
-      const container = document.getElementById('strategyTabIntermediate');
+    function renderIntermediateSection(strategy) {
+      const container = document.getElementById('strategySectionIntermediate');
       const intermediate = strategy.intermediateResults || {};
       const keys = Object.keys(intermediate);
 
@@ -2756,8 +2723,8 @@
       return labels[key] || key;
     }
 
-    function renderStepsTab(strategy) {
-      const container = document.getElementById('strategyTabSteps');
+    function renderStepsSection(strategy) {
+      const container = document.getElementById('strategySectionSteps');
       const history = strategy.executionHistory || [];
       const latestExecution = history.length > 0 ? history[history.length - 1] : null;
 
@@ -2788,8 +2755,8 @@
       }).join('');
     }
 
-    function renderHistoryTab(strategy) {
-      const container = document.getElementById('strategyTabHistory');
+    function renderHistorySection(strategy) {
+      const container = document.getElementById('strategySectionHistory');
       const history = strategy.executionHistory || [];
 
       if (history.length === 0) {
