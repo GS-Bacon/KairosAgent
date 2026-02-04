@@ -13,6 +13,7 @@
     "@auto-claude/compliance": "workspace:*",
     "@auto-claude/notification": "workspace:*",
     "@auto-claude/browser": "workspace:*",
-    "@auto-claude/ai-router": "workspace:*"
+    "@auto-claude/ai-router": "workspace:*",
+    "@auto-claude/error-aggregator": "workspace:*"
   }
 }

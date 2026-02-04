@@ -1,5 +1,6 @@
 import { getLogger } from '@auto-claude/core';
 import { getDiscordNotifier } from '@auto-claude/notification';
+import { getErrorAggregator } from '@auto-claude/error-aggregator';
 import { Strategy, StrategyType, StrategyStatus, getStrategyManager } from './strategy-manager.js';
 import { BaseExecutor, ExecutionResult } from './executors/base-executor.js';
 import { AffiliateExecutor } from './executors/affiliate-executor.js';
@@ -16,6 +17,7 @@ export class StrategyExecutor {
   private executors: BaseExecutor[] = [];
   private discord = getDiscordNotifier();
   private strategyManager = getStrategyManager();
+  private errorAggregator = getErrorAggregator();
   private executionHistory: Map<string, ExecutionResult[]> = new Map();
 
   constructor() {
@@ -149,6 +151,14 @@ export class StrategyExecutor {
         '戦略実行失敗',
         `${strategy.name}: ${result.summary}`
       );
+
+      // エラー集約システムに報告
+      this.errorAggregator.report('strategy_execution', new Error(result.summary), {
+        strategyId: strategy.id,
+        strategyName: strategy.name,
+        strategyType: strategy.type,
+        stepResults: result.stepResults,
+      });
     }
 
     return result;

@@ -38,6 +38,9 @@ importers:
       '@auto-claude/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@auto-claude/error-aggregator':
+        specifier: workspace:*
+        version: link:../../packages/error-aggregator
       '@auto-claude/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
@@ -84,6 +87,9 @@ importers:
       '@auto-claude/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@auto-claude/error-aggregator':
+        specifier: workspace:*
+        version: link:../../packages/error-aggregator
       '@auto-claude/github':
         specifier: workspace:*
         version: link:../../packages/github
@@ -153,6 +159,12 @@ importers:
       zod:
         specifier: ^3.22.4
         version: 3.25.76
+
+  packages/error-aggregator:
+    dependencies:
+      '@auto-claude/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/experiments:
     dependencies:
@@ -257,6 +269,9 @@ importers:
       '@auto-claude/core':
         specifier: workspace:*
         version: link:../core
+      '@auto-claude/error-aggregator':
+        specifier: workspace:*
+        version: link:../error-aggregator
       '@auto-claude/notification':
         specifier: workspace:*
         version: link:../notification

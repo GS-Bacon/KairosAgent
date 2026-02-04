@@ -19,6 +19,7 @@
     "@auto-claude/ai-router": "workspace:*",
     "@auto-claude/self-improve": "workspace:*",
     "@auto-claude/strategies": "workspace:*",
-    "@auto-claude/github": "workspace:*"
+    "@auto-claude/github": "workspace:*",
+    "@auto-claude/error-aggregator": "workspace:*"
   }
 }

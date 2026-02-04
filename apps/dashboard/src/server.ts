@@ -13,6 +13,13 @@ import { getTaskQueue } from '@auto-claude/ai-router';
 import { getAuditLogger } from '@auto-claude/audit';
 import { getReportGenerator } from '@auto-claude/self-improve';
 import { getMemoryManager } from '@auto-claude/memory';
+import {
+  getErrorAggregator,
+  getRepairQueue,
+  getRepairCircuitBreaker,
+  getAutoRepairer,
+  type ErrorFilter,
+} from '@auto-claude/error-aggregator';
 
 const logger = getLogger('dashboard');
 
@@ -440,6 +447,188 @@ export class DashboardServer {
         }
       } catch (error) {
         res.status(500).json({ error: 'Failed to get notification history' });
+      }
+    });
+
+    // ========== エラー集約・自動修正 API ==========
+
+    // エラー一覧 API
+    this.app.get('/api/errors', (req: Request, res: Response) => {
+      try {
+        const aggregator = getErrorAggregator();
+
+        const filter: ErrorFilter = {};
+        if (req.query.sources) {
+          filter.sources = (req.query.sources as string).split(',') as ErrorFilter['sources'];
+        }
+        if (req.query.statuses) {
+          filter.statuses = (req.query.statuses as string).split(',') as ErrorFilter['statuses'];
+        }
+        if (req.query.severities) {
+          filter.severities = (req.query.severities as string).split(',') as ErrorFilter['severities'];
+        }
+        if (req.query.limit) {
+          filter.limit = parseInt(req.query.limit as string);
+        }
+        if (req.query.offset) {
+          filter.offset = parseInt(req.query.offset as string);
+        }
+
+        const errors = aggregator.getErrors(filter);
+        const stats = aggregator.getStats();
+
+        res.json({ errors, stats });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get errors' });
+      }
+    });
+
+    // エラー詳細 API
+    this.app.get('/api/errors/:id', (req: Request, res: Response) => {
+      try {
+        const aggregator = getErrorAggregator();
+        const error = aggregator.getError(req.params.id);
+
+        if (!error) {
+          res.status(404).json({ error: 'Error not found' });
+          return;
+        }
+
+        res.json(error);
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get error details' });
+      }
+    });
+
+    // 手動修正トリガー API
+    this.app.post('/api/errors/:id/repair', async (req: Request, res: Response) => {
+      try {
+        const repairer = getAutoRepairer();
+        const customPrompt = req.body.prompt as string | undefined;
+
+        const result = await repairer.repairError(req.params.id, customPrompt);
+
+        if (!result) {
+          res.status(400).json({ error: 'Failed to trigger repair' });
+          return;
+        }
+
+        res.json({ success: result.success, result });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to trigger repair' });
+      }
+    });
+
+    // エラーステータス更新 API
+    this.app.patch('/api/errors/:id', (req: Request, res: Response) => {
+      try {
+        const aggregator = getErrorAggregator();
+        const { status } = req.body;
+
+        if (!status) {
+          res.status(400).json({ error: 'Status is required' });
+          return;
+        }
+
+        const success = aggregator.updateErrorStatus(req.params.id, status, 'manual');
+
+        if (!success) {
+          res.status(404).json({ error: 'Error not found' });
+          return;
+        }
+
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to update error status' });
+      }
+    });
+
+    // 修正キュー API
+    this.app.get('/api/repair-queue', (req: Request, res: Response) => {
+      try {
+        const queue = getRepairQueue();
+        const tasks = queue.getTasks();
+        const processing = queue.getProcessingTask();
+        const pendingCount = queue.getPendingCount();
+
+        res.json({ tasks, processing, pendingCount });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get repair queue' });
+      }
+    });
+
+    // 修正タスクキャンセル API
+    this.app.post('/api/repair-queue/:taskId/cancel', (req: Request, res: Response) => {
+      try {
+        const queue = getRepairQueue();
+        const success = queue.cancel(req.params.taskId);
+
+        if (!success) {
+          res.status(404).json({ error: 'Task not found' });
+          return;
+        }
+
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to cancel repair task' });
+      }
+    });
+
+    // サーキットブレーカー状態 API
+    this.app.get('/api/circuit-breaker', (req: Request, res: Response) => {
+      try {
+        const circuitBreaker = getRepairCircuitBreaker();
+        const state = circuitBreaker.getState();
+        const config = circuitBreaker.getConfig();
+        const remainingCooldownMs = circuitBreaker.getRemainingCooldownMs();
+
+        res.json({ state, config, remainingCooldownMs });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get circuit breaker state' });
+      }
+    });
+
+    // サーキットブレーカーリセット API
+    this.app.post('/api/circuit-breaker/reset', (req: Request, res: Response) => {
+      try {
+        const circuitBreaker = getRepairCircuitBreaker();
+        circuitBreaker.reset();
+
+        res.json({ success: true });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to reset circuit breaker' });
+      }
+    });
+
+    // 自動修正設定 API
+    this.app.get('/api/auto-repairer', (req: Request, res: Response) => {
+      try {
+        const repairer = getAutoRepairer();
+        const config = repairer.getConfig();
+        const isRunning = repairer.isRunning();
+        const isEnabled = repairer.isEnabled();
+
+        res.json({ config, isRunning, isEnabled });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get auto repairer status' });
+      }
+    });
+
+    // 自動修正有効/無効切り替え API
+    this.app.post('/api/auto-repairer/toggle', (req: Request, res: Response) => {
+      try {
+        const repairer = getAutoRepairer();
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+          res.status(400).json({ error: 'enabled (boolean) is required' });
+          return;
+        }
+
+        repairer.setEnabled(enabled);
+        res.json({ success: true, enabled: repairer.isEnabled() });
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to toggle auto repairer' });
       }
     });
   }

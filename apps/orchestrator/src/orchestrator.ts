@@ -17,6 +17,7 @@ import {
 } from '@auto-claude/self-improve';
 import { getStrategyManager, getStrategyActivator, getStrategyExecutor } from '@auto-claude/strategies';
 import { getGitHubManager } from '@auto-claude/github';
+import { getErrorAggregator, getAutoRepairer, getRepairCircuitBreaker } from '@auto-claude/error-aggregator';
 import { Scheduler } from './scheduler.js';
 import { HeartbeatManager } from './heartbeat.js';
 
@@ -59,6 +60,8 @@ export class Orchestrator {
   private githubManager = getGitHubManager();
   private suggestionGate = getSuggestionGate();
   private reportGenerator = getReportGenerator();
+  private errorAggregator = getErrorAggregator();
+  private autoRepairer = getAutoRepairer();
 
   constructor() {
     this.scheduler = new Scheduler();
@@ -559,6 +562,57 @@ export class Orchestrator {
         });
       },
     });
+
+    // エラー自動修正（15分ごと）
+    this.scheduler.registerTask({
+      id: 'error_auto_repair',
+      name: 'エラー自動修正',
+      intervalMs: 15 * 60 * 1000,
+      enabled: true,
+      requiresClaude: true,
+      handler: async () => {
+        const circuitBreaker = getRepairCircuitBreaker();
+        const circuitState = circuitBreaker.getState();
+
+        if (circuitState.state === 'open') {
+          const remainingMs = circuitBreaker.getRemainingCooldownMs();
+          logger.info('Error auto-repair skipped: circuit breaker open', {
+            remainingCooldownMs: remainingMs,
+          });
+          return;
+        }
+
+        this.heartbeat.setPhase(WorkPhase.MAINTAINING, 'エラーを自動修正中', 'error_auto_repair', {
+          currentGoal: 'エラー自動修正',
+          nextSteps: ['新規エラーをキューに追加', 'キューを処理', '結果を記録'],
+        });
+
+        try {
+          const result = await this.autoRepairer.runCycle();
+
+          if (result.queued > 0 || result.processed > 0) {
+            logger.info('Error auto-repair cycle completed', {
+              queued: result.queued,
+              processed: result.processed,
+              successful: result.results.filter(r => r.success).length,
+              failed: result.results.filter(r => !r.success).length,
+            });
+
+            const stats = this.errorAggregator.getStats();
+            await this.discord.sendInfo(
+              'エラー自動修正',
+              `キュー追加: ${result.queued}件, 処理: ${result.processed}件\n成功: ${result.results.filter(r => r.success).length}件, 失敗: ${result.results.filter(r => !r.success).length}件\n未解決: ${stats.errorsByStatus.new + stats.errorsByStatus.queued}件`
+            );
+          }
+        } catch (error) {
+          logger.error('Error auto-repair cycle failed', { error });
+        }
+
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
+      },
+    });
   }
 
   private setupShutdownHandlers(): void {
@@ -578,6 +632,11 @@ export class Orchestrator {
         description: error.message,
       });
 
+      // エラー集約システムに報告
+      this.errorAggregator.report('orchestrator', error, {
+        type: 'uncaughtException',
+      });
+
       // 問題として登録
       await this.learningCycle.registerProblem({
         type: 'error',
@@ -589,7 +648,13 @@ export class Orchestrator {
 
     process.on('unhandledRejection', async (reason) => {
       const message = reason instanceof Error ? reason.message : String(reason);
+      const error = reason instanceof Error ? reason : new Error(message);
       logger.error('Unhandled rejection', { reason: message });
+
+      // エラー集約システムに報告
+      this.errorAggregator.report('orchestrator', error, {
+        type: 'unhandledRejection',
+      });
 
       await this.learningCycle.registerProblem({
         type: 'error',
@@ -1048,6 +1113,13 @@ ${suggestion.systemResponse?.actionPlan ? `- アクションプラン: ${suggest
         } else {
           logger.error('Failed to implement suggestion', { id: suggestion.id, error: result.error });
 
+          // エラー集約システムに報告
+          this.errorAggregator.report('suggestion_implementation', new Error(result.error || 'Implementation failed'), {
+            suggestionId: suggestion.id,
+            suggestionTitle: suggestion.title,
+            suggestionCategory: suggestion.category,
+          });
+
           // 失敗した場合は保留に戻す
           this.suggestionGate.updateSuggestion(suggestion.id, {
             status: 'deferred',
@@ -1064,7 +1136,15 @@ ${suggestion.systemResponse?.actionPlan ? `- アクションプラン: ${suggest
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorObj = error instanceof Error ? error : new Error(errorMessage);
         logger.error('Error implementing suggestion', { id: suggestion.id, error: errorMessage });
+
+        // エラー集約システムに報告
+        this.errorAggregator.report('suggestion_implementation', errorObj, {
+          suggestionId: suggestion.id,
+          suggestionTitle: suggestion.title,
+          suggestionCategory: suggestion.category,
+        });
 
         // エラーの場合も保留に戻す
         this.suggestionGate.updateSuggestion(suggestion.id, {
