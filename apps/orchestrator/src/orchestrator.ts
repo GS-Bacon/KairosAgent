@@ -1,11 +1,11 @@
-import { SystemState, getLogger, ensureDirectories, getConfig } from '@auto-claude/core';
+import { SystemState, WorkPhase, getLogger, ensureDirectories, getConfig, type Suggestion } from '@auto-claude/core';
 import { getLossLimiter, getBoundaryGuard, getResourceManager } from '@auto-claude/safety';
 import { getBackupManager } from '@auto-claude/backup';
 import { getAuditLogger } from '@auto-claude/audit';
 import { getDiscordNotifier, getApprovalGate, getSuggestionGate } from '@auto-claude/notification';
 import { getMemoryManager } from '@auto-claude/memory';
 import { getLedger } from '@auto-claude/ledger';
-import { getTaskQueue } from '@auto-claude/ai-router';
+import { getTaskQueue, getClaudeCLI } from '@auto-claude/ai-router';
 import { getLearningCycleManager, getReportGenerator } from '@auto-claude/self-improve';
 import { getStrategyManager } from '@auto-claude/strategies';
 import { getGitHubManager } from '@auto-claude/github';
@@ -98,6 +98,9 @@ export class Orchestrator {
       await this.discord.sendSuccess('システム起動', 'AutoClaudeKMP が起動しました');
 
       logger.info('Orchestrator started successfully');
+
+      // 起動時に初回タスクを実行（非同期で遅延実行）
+      setTimeout(() => this.runInitialTasks(), 3000);
     } catch (error) {
       this.state.status = 'stopped';
       this.state.systemState = SystemState.STOPPED;
@@ -120,6 +123,17 @@ export class Orchestrator {
       },
     });
 
+    // 提案チェック（5分ごと）
+    this.scheduler.registerTask({
+      id: 'suggestion_check',
+      name: '提案チェック',
+      intervalMs: 5 * 60 * 1000,
+      enabled: true,
+      handler: async () => {
+        await this.processPendingSuggestions();
+      },
+    });
+
     // ハートビート（30分ごと）
     this.scheduler.registerTask({
       id: 'heartbeat',
@@ -132,9 +146,6 @@ export class Orchestrator {
           'ハートビート',
           `稼働時間: ${Math.floor(status.uptime / 60)}分, 状態: ${status.health.state}`
         );
-
-        // 提案の処理
-        await this.processPendingSuggestions();
       },
     });
 
@@ -145,7 +156,14 @@ export class Orchestrator {
       cronExpression: '0 3 * * *',
       enabled: true,
       handler: async () => {
+        this.heartbeat.setPhase(WorkPhase.MAINTAINING, 'バックアップを作成中', 'daily_backup', {
+          currentGoal: 'データ保護',
+          nextSteps: ['バックアップ完了後に待機状態へ'],
+        });
         await this.backupManager.dailyBackup();
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
       },
     });
 
@@ -157,12 +175,24 @@ export class Orchestrator {
       enabled: true,
       handler: async () => {
         // 学習サイクルレビュー
+        this.heartbeat.setPhase(WorkPhase.LEARNING, '過去のパフォーマンスをレビュー中', 'daily_analysis', {
+          currentGoal: '日次分析・改善',
+          nextSteps: ['戦略評価', '日報生成', 'Discordへ通知'],
+        });
         await this.learningCycle.dailyReview();
 
         // 戦略評価
+        this.heartbeat.setPhase(WorkPhase.REVIEWING, '収益化戦略の効果を評価中', 'daily_analysis', {
+          currentGoal: '日次分析・改善',
+          nextSteps: ['日報生成', 'Discordへ通知'],
+        });
         await this.strategyManager.evaluateStrategies();
 
         // 日報生成
+        this.heartbeat.setPhase(WorkPhase.ANALYZING, '日次レポートを生成中', 'daily_analysis', {
+          currentGoal: '日次分析・改善',
+          nextSteps: ['Discordへ通知'],
+        });
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().slice(0, 10);
@@ -174,6 +204,11 @@ export class Orchestrator {
           '日次レポート',
           `今月の収益: ¥${summary.totalIncome.toLocaleString()}, 支出: ¥${summary.totalExpense.toLocaleString()}`
         );
+
+        // タスク完了後は待機状態に戻す
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
       },
     });
 
@@ -184,6 +219,11 @@ export class Orchestrator {
       cronExpression: '0 6 * * 1',
       enabled: true,
       handler: async () => {
+        this.heartbeat.setPhase(WorkPhase.ANALYZING, '週次レポートを生成中', 'weekly_report', {
+          currentGoal: '週次振り返り',
+          nextSteps: ['レポート生成', 'Discordへ通知'],
+        });
+
         // 先週の週報を生成
         const lastWeek = new Date();
         lastWeek.setDate(lastWeek.getDate() - 7);
@@ -193,6 +233,57 @@ export class Orchestrator {
           '週報',
           `${report.week}: タスク${report.totals.tasksCompleted}件完了, 純収益¥${report.totals.net.toLocaleString()}`
         );
+
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
+      },
+    });
+
+    // 戦略実行（30分ごと）
+    this.scheduler.registerTask({
+      id: 'strategy_execution',
+      name: '戦略実行',
+      intervalMs: 30 * 60 * 1000,
+      enabled: true,
+      handler: async () => {
+        this.heartbeat.setPhase(WorkPhase.IMPLEMENTING, '戦略を実行中', 'strategy_execution', {
+          currentGoal: '収益化推進',
+          nextSteps: ['アクティブ戦略の実行', '結果の記録'],
+        });
+        await this.strategyManager.executeActiveStrategies();
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
+      },
+    });
+
+    // 採択提案の自動実装（30分ごと）
+    this.scheduler.registerTask({
+      id: 'implement_accepted',
+      name: '採択提案の自動実装',
+      intervalMs: 30 * 60 * 1000,
+      enabled: true,
+      handler: async () => {
+        await this.implementAcceptedSuggestions();
+      },
+    });
+
+    // 改善機会探索（1時間ごと）
+    this.scheduler.registerTask({
+      id: 'improvement_seek',
+      name: '改善機会探索',
+      intervalMs: 60 * 60 * 1000,
+      enabled: true,
+      handler: async () => {
+        this.heartbeat.setPhase(WorkPhase.LEARNING, '改善機会を探索中', 'improvement_seek', {
+          currentGoal: '継続的改善',
+          nextSteps: ['問題パターン分析', '改善検証確認'],
+        });
+        await this.learningCycle.seekImprovementOpportunities();
+        this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+          nextSteps: ['次の定期タスクまで待機'],
+        });
       },
     });
 
@@ -276,6 +367,45 @@ export class Orchestrator {
     });
   }
 
+  private async runInitialTasks(): Promise<void> {
+    logger.info('Running initial tasks after startup');
+
+    try {
+      // 提案チェック
+      this.heartbeat.setPhase(WorkPhase.PLANNING, '起動後の提案を確認中', 'initial_check', {
+        currentGoal: '初期化',
+        nextSteps: ['提案確認', '戦略実行', '改善探索'],
+      });
+      await this.processPendingSuggestions();
+
+      // 戦略実行
+      this.heartbeat.setPhase(WorkPhase.IMPLEMENTING, '起動後の戦略を実行中', 'initial_check', {
+        currentGoal: '初期化',
+        nextSteps: ['戦略実行', '改善探索'],
+      });
+      await this.strategyManager.executeActiveStrategies();
+
+      // 改善機会探索
+      this.heartbeat.setPhase(WorkPhase.LEARNING, '起動後の改善機会を探索中', 'initial_check', {
+        currentGoal: '初期化',
+        nextSteps: ['改善探索'],
+      });
+      await this.learningCycle.seekImprovementOpportunities();
+
+      // 完了後はIDLEに
+      this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+        nextSteps: ['次の定期タスクまで待機'],
+      });
+
+      logger.info('Initial tasks completed');
+    } catch (error) {
+      logger.error('Initial tasks failed', { error });
+      this.heartbeat.setPhase(WorkPhase.IDLE, '初期タスクでエラー発生', undefined, {
+        nextSteps: ['定期タスクで再試行'],
+      });
+    }
+  }
+
   async stop(): Promise<void> {
     if (this.state.status === 'stopped') {
       return;
@@ -336,60 +466,358 @@ export class Orchestrator {
 
   private async processPendingSuggestions(): Promise<void> {
     const pendingSuggestions = this.suggestionGate.getPending();
+    const deferredSuggestions = this.suggestionGate.getDeferred();
 
-    if (pendingSuggestions.length === 0) {
+    const totalCount = pendingSuggestions.length + deferredSuggestions.length;
+
+    if (totalCount === 0) {
       return;
     }
 
-    logger.info('Processing pending suggestions', { count: pendingSuggestions.length });
+    logger.info('Processing suggestions', {
+      pending: pendingSuggestions.length,
+      deferred: deferredSuggestions.length,
+    });
 
-    for (const suggestion of pendingSuggestions) {
-      try {
-        // 提案を分析して判断（シンプルな自動判断ロジック）
-        const analysis = this.analyzeSuggestion(suggestion);
+    // 新規提案を処理
+    if (pendingSuggestions.length > 0) {
+      this.heartbeat.setPhase(WorkPhase.PLANNING, `新規提案を検討中（${pendingSuggestions.length}件）`, 'suggestions', {
+        currentGoal: 'ユーザー要望への対応',
+        nextSteps: ['AI分析・評価', 'Discordへ回答を通知'],
+      });
 
-        // 応答を記録
-        this.suggestionGate.respond(
-          suggestion.id,
-          {
-            analysis: analysis.analysis,
-            decision: analysis.decision,
-            actionPlan: analysis.actionPlan,
-          },
-          analysis.status
-        );
-
-        // Discord通知（回答時のみ）
-        await this.discord.sendInfo(
-          '提案への回答',
-          `「${suggestion.title}」に回答しました: ${analysis.decision}`
-        );
-
-        // 監査ログ
-        await this.auditLogger.log({
-          actionType: 'suggestion_respond',
-          description: `Responded to suggestion: ${suggestion.title}`,
-          actor: 'ai',
-          riskLevel: 1,
-          approved: true,
-          success: true,
+      for (const suggestion of pendingSuggestions) {
+        this.heartbeat.setPhase(WorkPhase.PLANNING, `ユーザー提案「${suggestion.title}」をAI分析中`, 'suggestions', {
+          currentGoal: 'ユーザー要望への対応',
+          nextSteps: ['提案の分析・評価', 'Discordへ回答を通知'],
         });
-      } catch (error) {
-        logger.error('Failed to process suggestion', { id: suggestion.id, error });
+        try {
+          // AI分析を実行
+          const analysis = await this.analyzeSuggestionWithAI(suggestion);
+
+          // 応答を記録
+          this.suggestionGate.respond(
+            suggestion.id,
+            {
+              analysis: analysis.analysis,
+              decision: analysis.decision,
+              actionPlan: analysis.actionPlan,
+            },
+            analysis.status
+          );
+
+          // Discord通知
+          await this.discord.sendSuggestionResponse(
+            '提案への回答',
+            `「${suggestion.title}」に回答しました: ${analysis.decision}`
+          );
+
+          // 監査ログ
+          await this.auditLogger.log({
+            actionType: 'suggestion_respond',
+            description: `AI responded to suggestion: ${suggestion.title}`,
+            actor: 'ai',
+            riskLevel: 1,
+            approved: true,
+            success: true,
+          });
+        } catch (error) {
+          logger.error('Failed to process suggestion', { id: suggestion.id, error });
+          // フォールバック: 簡易分析
+          const fallbackAnalysis = this.analyzeSuggestionFallback(suggestion);
+          this.suggestionGate.respond(
+            suggestion.id,
+            {
+              analysis: fallbackAnalysis.analysis,
+              decision: fallbackAnalysis.decision,
+              actionPlan: fallbackAnalysis.actionPlan,
+            },
+            fallbackAnalysis.status
+          );
+        }
       }
     }
+
+    // 保留中の提案を再検討
+    if (deferredSuggestions.length > 0) {
+      this.heartbeat.setPhase(WorkPhase.REVIEWING, `保留中の提案を再検討中（${deferredSuggestions.length}件）`, 'suggestions', {
+        currentGoal: '保留提案の再評価',
+        nextSteps: ['再検討', '状況変化の確認'],
+      });
+
+      for (const suggestion of deferredSuggestions) {
+        await this.reviewDeferredSuggestion(suggestion);
+      }
+    }
+
+    this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+      nextSteps: ['次の定期タスクまで待機'],
+    });
   }
 
-  private analyzeSuggestion(suggestion: { title: string; content: string; category: string; priority: string }): {
+  private async analyzeSuggestionWithAI(suggestion: Suggestion): Promise<{
     analysis: string;
     decision: string;
     actionPlan?: string;
-    status: 'accepted' | 'rejected' | 'deferred';
-  } {
-    // 基本的な自動判断ロジック
-    // 実際のプロダクションではAIを使った詳細な分析を行う
+    status: 'accepted' | 'rejected' | 'implemented' | 'deferred';
+  }> {
+    const claudeCLI = getClaudeCLI();
 
-    const { category, priority, title, content } = suggestion;
+    const isQuestion = suggestion.category === 'question';
+
+    const prompt = `あなたはAutoClaudeKMPシステムの提案分析AIです。以下のユーザー提案を分析し、適切に対応してください。
+
+【提案情報】
+- タイトル: ${suggestion.title}
+- カテゴリ: ${suggestion.category}
+- 優先度: ${suggestion.priority}
+- 内容: ${suggestion.content}
+
+【指示】
+${isQuestion ? `これはユーザーからの質問です。質問に対して具体的かつ親切に回答してください。回答後はstatusを"implemented"（完了）としてください。` : `
+この提案を分析し、以下の観点から評価してください:
+1. 実現可能性
+2. システムへの貢献度
+3. 実装コスト
+
+評価に基づいて以下のいずれかを決定してください:
+- "accepted": 採択（実装予定に追加）
+- "rejected": 却下（理由を明記）
+- "deferred": 保留（追加情報や検討が必要）
+`}
+
+【回答形式】
+以下のJSON形式で回答してください（他の文言は不要）:
+{
+  "analysis": "分析内容や質問への回答（詳しく記載）",
+  "decision": "判断理由（1-2文）",
+  "actionPlan": "採択の場合の実装計画（不要な場合はnull）",
+  "status": "accepted|rejected|implemented|deferred"
+}`;
+
+    try {
+      const result = await claudeCLI.executeTask({
+        prompt,
+        timeout: 60000,
+        allowedTools: [], // ツール不要
+      });
+
+      if (!result.success) {
+        throw new Error(`Claude CLI failed: ${result.error}`);
+      }
+
+      // JSONを抽出してパース
+      const jsonMatch = result.output.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No JSON found in response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // 質問の場合は必ずimplementedにする
+      if (isQuestion && parsed.status !== 'implemented') {
+        parsed.status = 'implemented';
+      }
+
+      return {
+        analysis: parsed.analysis || '分析を完了しました。',
+        decision: parsed.decision || '検討しました。',
+        actionPlan: parsed.actionPlan || undefined,
+        status: parsed.status || 'deferred',
+      };
+    } catch (error) {
+      logger.error('AI analysis failed, using fallback', { error });
+      throw error;
+    }
+  }
+
+  private async reviewDeferredSuggestion(suggestion: Suggestion): Promise<void> {
+    const reviewCount = this.suggestionGate.incrementReviewCount(suggestion.id);
+    const maxReviews = 5; // 5回再検討後は自動却下
+
+    logger.info('Reviewing deferred suggestion', {
+      id: suggestion.id,
+      title: suggestion.title,
+      reviewCount,
+    });
+
+    // 再検討回数が上限に達した場合は自動却下
+    if (reviewCount >= maxReviews) {
+      this.suggestionGate.updateSuggestion(suggestion.id, {
+        status: 'rejected',
+        systemResponse: {
+          analysis: `${maxReviews}回の再検討を行いましたが、現時点では採択できませんでした。`,
+          decision: '再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。',
+        },
+      });
+
+      await this.discord.sendInfo(
+        '保留提案の自動却下',
+        `「${suggestion.title}」は再検討上限（${maxReviews}回）に達したため却下されました。`
+      );
+      return;
+    }
+
+    // AIで再評価（簡易版）
+    try {
+      const claudeCLI = getClaudeCLI();
+
+      const prompt = `以下の保留中の提案を再評価してください。状況に変化があれば採択または却下を判断してください。
+
+【提案情報】
+- タイトル: ${suggestion.title}
+- カテゴリ: ${suggestion.category}
+- 内容: ${suggestion.content}
+- 再検討回数: ${reviewCount}回目
+
+現時点で採択または却下を決定できる場合はそのステータスを、まだ判断できない場合は"deferred"を返してください。
+
+回答形式（JSONのみ）:
+{
+  "status": "accepted|rejected|deferred",
+  "reason": "判断理由"
+}`;
+
+      const result = await claudeCLI.executeTask({
+        prompt,
+        timeout: 30000,
+        allowedTools: [],
+      });
+
+      if (result.success) {
+        const jsonMatch = result.output.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+
+          if (parsed.status && parsed.status !== 'deferred') {
+            this.suggestionGate.updateSuggestion(suggestion.id, {
+              status: parsed.status,
+              systemResponse: {
+                analysis: `再検討（${reviewCount}回目）の結果、判断を更新しました。`,
+                decision: parsed.reason || '再評価により判断を変更しました。',
+              },
+            });
+
+            await this.discord.sendInfo(
+              '保留提案の再評価',
+              `「${suggestion.title}」が再評価により「${parsed.status}」に更新されました。`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      logger.debug('Deferred review AI failed, keeping deferred status', { error });
+      // 失敗した場合は保留のまま
+    }
+  }
+
+  private async implementAcceptedSuggestions(): Promise<void> {
+    const acceptedSuggestions = this.suggestionGate.getAccepted();
+
+    if (acceptedSuggestions.length === 0) {
+      return;
+    }
+
+    logger.info('Implementing accepted suggestions', { count: acceptedSuggestions.length });
+
+    const claudeCLI = getClaudeCLI();
+
+    for (const suggestion of acceptedSuggestions) {
+      this.heartbeat.setPhase(WorkPhase.IMPLEMENTING, `採択提案「${suggestion.title}」を実装中`, 'implement_accepted', {
+        currentGoal: '提案の自動実装',
+        nextSteps: ['ClaudeCLIで実装', '結果を記録'],
+      });
+
+      try {
+        const prompt = `以下の採択された提案を実装してください。
+
+【提案情報】
+- タイトル: ${suggestion.title}
+- カテゴリ: ${suggestion.category}
+- 内容: ${suggestion.content}
+${suggestion.systemResponse?.actionPlan ? `- アクションプラン: ${suggestion.systemResponse.actionPlan}` : ''}
+
+【指示】
+この提案に基づいて、必要なコード変更を実装してください。
+- 既存のコードベースのスタイルに従ってください
+- 必要最小限の変更に留めてください
+- 実装完了後、何を変更したかを簡潔に説明してください`;
+
+        const result = await claudeCLI.executeTask({
+          prompt,
+          allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+          timeout: 5 * 60 * 1000, // 5分
+        });
+
+        if (result.success) {
+          // 成功したらimplementedに更新
+          this.suggestionGate.updateSuggestion(suggestion.id, {
+            status: 'implemented',
+            systemResponse: {
+              analysis: suggestion.systemResponse?.analysis || '実装を完了しました。',
+              decision: `実装完了: ${result.output.slice(0, 200)}${result.output.length > 200 ? '...' : ''}`,
+            },
+          });
+
+          await this.discord.sendSuccess(
+            '提案を自動実装',
+            `「${suggestion.title}」の実装が完了しました。`
+          );
+
+          await this.auditLogger.log({
+            actionType: 'suggestion_implement',
+            description: `Implemented suggestion: ${suggestion.title}`,
+            actor: 'ai',
+            riskLevel: 2,
+            approved: true,
+            success: true,
+          });
+
+          logger.info('Suggestion implemented successfully', { id: suggestion.id, title: suggestion.title });
+        } else {
+          logger.error('Failed to implement suggestion', { id: suggestion.id, error: result.error });
+
+          // 失敗した場合は保留に戻す
+          this.suggestionGate.updateSuggestion(suggestion.id, {
+            status: 'deferred',
+            systemResponse: {
+              analysis: suggestion.systemResponse?.analysis || '実装に失敗しました。',
+              decision: `実装失敗: ${result.error}。再試行予定。`,
+            },
+          });
+
+          await this.discord.sendWarning(
+            '提案実装失敗',
+            `「${suggestion.title}」の実装に失敗しました: ${result.error}`
+          );
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        logger.error('Error implementing suggestion', { id: suggestion.id, error: errorMessage });
+
+        // エラーの場合も保留に戻す
+        this.suggestionGate.updateSuggestion(suggestion.id, {
+          status: 'deferred',
+          systemResponse: {
+            analysis: suggestion.systemResponse?.analysis || '実装中にエラーが発生しました。',
+            decision: `エラー: ${errorMessage}。再試行予定。`,
+          },
+        });
+      }
+    }
+
+    this.heartbeat.setPhase(WorkPhase.IDLE, '次のタスクを待機中', undefined, {
+      nextSteps: ['次の定期タスクまで待機'],
+    });
+  }
+
+  private analyzeSuggestionFallback(suggestion: Suggestion): {
+    analysis: string;
+    decision: string;
+    actionPlan?: string;
+    status: 'accepted' | 'rejected' | 'implemented' | 'deferred';
+  } {
+    const { category, priority, content } = suggestion;
 
     // バグ報告は優先的に採択
     if (category === 'bug') {
@@ -411,19 +839,19 @@ export class Orchestrator {
       };
     }
 
-    // 質問は回答して保留
+    // 質問は回答済みとして処理
     if (category === 'question') {
       return {
-        analysis: `ご質問を確認しました。`,
-        decision: '確認して回答いたします',
-        status: 'deferred',
+        analysis: `ご質問を確認しました。詳細な回答はAI分析が復旧次第お送りします。`,
+        decision: '質問を受け付けました',
+        status: 'implemented',
       };
     }
 
-    // その他は検討の上保留
+    // その他は保留
     return {
       analysis: `提案を受け付けました。カテゴリ: ${category}, 優先度: ${priority}`,
-      decision: '検討の結果、保留とさせていただきます。リソースに余裕ができ次第対応を検討します。',
+      decision: '検討中です。しばらくお待ちください。',
       status: 'deferred',
     };
   }

@@ -50,11 +50,26 @@ export class DashboardServer {
       try {
         const systemRisk = getSystemRiskMonitor();
         const systemStatus = await systemRisk.checkSystem();
+        const memory = getMemoryManager();
+
+        // SYSTEM_STATUS.jsonからcurrentPhaseを取得
+        let currentPhase = null;
+        try {
+          const statusData = await memory.readJson('SYSTEM_STATUS.json') as {
+            health?: { currentPhase?: unknown };
+          } | null;
+          if (statusData?.health?.currentPhase) {
+            currentPhase = statusData.health.currentPhase;
+          }
+        } catch {
+          // ファイルがない場合は無視
+        }
 
         res.json({
           state: systemStatus.state,
           resources: systemStatus.resources,
           issues: systemStatus.issues,
+          currentPhase,
         });
       } catch (error) {
         res.status(500).json({ error: 'Failed to get status' });
@@ -157,7 +172,7 @@ export class DashboardServer {
     this.app.get('/api/activity', async (req: Request, res: Response) => {
       try {
         const auditLogger = getAuditLogger();
-        const logs = await auditLogger.getRecent(20);
+        const logs = await auditLogger.getRecent(5);
         res.json(logs);
       } catch (error) {
         res.status(500).json({ error: 'Failed to get activity' });
@@ -302,6 +317,7 @@ export class DashboardServer {
               error: true,
               critical: true,
               audit: false,
+              suggestionResponse: true,
             },
           });
         }

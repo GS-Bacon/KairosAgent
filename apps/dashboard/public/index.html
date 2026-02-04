@@ -263,15 +263,31 @@
     .suggestion-item {
       background: #1a1a2e;
       border-radius: 8px;
-      padding: 15px;
-      margin-bottom: 10px;
+      padding: 12px;
+      margin-bottom: 8px;
     }
 
     .suggestion-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8px;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .suggestion-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .suggestion-header-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
     }
 
     .suggestion-title {
@@ -293,8 +309,13 @@
 
     .suggestion-content {
       color: #aaa;
-      font-size: 14px;
-      margin-bottom: 10px;
+      font-size: 13px;
+      margin-bottom: 6px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.4;
     }
 
     .suggestion-response {
@@ -317,9 +338,105 @@
 
     .suggestion-meta {
       display: flex;
-      gap: 10px;
-      font-size: 12px;
+      justify-content: flex-end;
+      font-size: 11px;
       color: #666;
+    }
+
+    /* 提案ステータスタブ（常時表示） */
+    .suggestion-status-tabs {
+      display: block;
+    }
+
+    .kanban-empty {
+      text-align: center;
+      color: #555;
+      font-size: 13px;
+      padding: 20px 0;
+    }
+
+    .status-tab-buttons {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 15px;
+      overflow-x: auto;
+      padding-bottom: 5px;
+    }
+
+    .status-tab-btn {
+      padding: 8px 12px;
+      background: #1a1a2e;
+      border: none;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .status-tab-btn.active {
+      background: #0f3460;
+      color: #fff;
+    }
+
+    .status-tab-btn .tab-count {
+      margin-left: 4px;
+      background: #333;
+      padding: 1px 6px;
+      border-radius: 8px;
+      font-size: 11px;
+    }
+
+    .status-tab-btn.active .tab-count {
+      background: #3498db;
+    }
+
+    .status-tab-content {
+      display: none;
+    }
+
+    .status-tab-content.active {
+      display: block;
+    }
+
+    /* 提案タブ横並びレイアウト */
+    .suggestions-layout {
+      display: flex;
+      gap: 20px;
+    }
+
+    .suggestions-layout .suggestion-form-card {
+      flex: 0 0 340px;
+      min-width: 340px;
+    }
+
+    .suggestions-layout .suggestion-list-card {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .suggestions-layout .suggestion-form {
+      gap: 10px;
+    }
+
+    .suggestions-layout .form-group textarea {
+      min-height: 80px;
+    }
+
+    .suggestions-layout .form-row {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    @media (max-width: 768px) {
+      .suggestions-layout {
+        flex-direction: column;
+      }
+      .suggestions-layout .suggestion-form-card {
+        flex: none;
+        min-width: auto;
+      }
     }
 
     .badge {
@@ -625,6 +742,260 @@
     .notification-failed {
       color: #e74c3c;
     }
+
+    /* フェーズ表示 */
+    .phase-display {
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+    }
+
+    .phase-icon {
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .phase-info {
+      flex: 1;
+    }
+
+    .phase-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .phase-description {
+      color: #aaa;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .phase-time {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .phase-progress {
+      margin-top: 10px;
+      height: 4px;
+      background: #333;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .phase-progress-bar {
+      height: 100%;
+      background: #3498db;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .phase-idle { color: #95a5a6; }
+    .phase-planning { color: #9b59b6; }
+    .phase-implementing { color: #3498db; }
+    .phase-reviewing { color: #f1c40f; }
+    .phase-analyzing { color: #1abc9c; }
+    .phase-maintaining { color: #e67e22; }
+    .phase-learning { color: #2ecc71; }
+
+    .phase-goal {
+      background: #0f3460;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 12px;
+    }
+
+    .phase-goal-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    .phase-goal-text {
+      font-size: 14px;
+      color: #3498db;
+      font-weight: bold;
+    }
+
+    .phase-next-steps {
+      margin-top: 12px;
+    }
+
+    .phase-next-steps-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 6px;
+    }
+
+    .phase-next-steps-list {
+      list-style: none;
+    }
+
+    .phase-next-steps-list li {
+      font-size: 13px;
+      color: #aaa;
+      padding: 3px 0;
+      padding-left: 16px;
+      position: relative;
+    }
+
+    .phase-next-steps-list li::before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: #666;
+    }
+
+    /* タスクフロー */
+    .task-flow-section {
+      margin-bottom: 15px;
+    }
+
+    .task-flow-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .task-flow-label {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .task-flow-item {
+      background: #1a1a2e;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .task-flow-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .task-flow-item.running {
+      border-left: 3px solid #3498db;
+      background: #1a1a2e;
+    }
+
+    .task-flow-item.next {
+      border-left: 3px solid #2ecc71;
+    }
+
+    .task-flow-item.completed {
+      border-left: 3px solid #555;
+      opacity: 0.7;
+    }
+
+    .task-flow-name {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .task-flow-time {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .task-flow-empty {
+      color: #666;
+      font-size: 14px;
+      text-align: center;
+      padding: 10px;
+    }
+
+    /* 戦略概要 */
+    .strategy-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .strategy-summary-item {
+      text-align: center;
+      padding: 10px;
+      background: #0f3460;
+      border-radius: 6px;
+    }
+
+    .strategy-summary-value {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .strategy-summary-label {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .strategy-list {
+      list-style: none;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    .strategy-item {
+      background: #1a1a2e;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    .strategy-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .strategy-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .strategy-name {
+      font-weight: bold;
+      font-size: 14px;
+    }
+
+    .strategy-status {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .strategy-status-active { background: #2ecc7133; color: #2ecc71; }
+    .strategy-status-draft { background: #95a5a633; color: #95a5a6; }
+    .strategy-status-paused { background: #f1c40f33; color: #f1c40f; }
+    .strategy-status-pending { background: #3498db33; color: #3498db; }
+    .strategy-status-completed { background: #9b59b633; color: #9b59b6; }
+    .strategy-status-failed { background: #e74c3c33; color: #e74c3c; }
+
+    .strategy-metrics {
+      display: flex;
+      gap: 15px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .strategy-roi.positive {
+      color: #2ecc71;
+    }
+
+    .strategy-roi.negative {
+      color: #e74c3c;
+    }
+
+    .strategy-empty {
+      color: #666;
+      font-size: 14px;
+      text-align: center;
+      padding: 20px;
+    }
   </style>
 </head>
 <body>
@@ -647,9 +1018,9 @@
   <div id="tab-dashboard" class="tab-content active">
     <div class="grid">
       <div class="card">
-        <h2>現在のタスク</h2>
-        <div id="currentTask">
-          <div class="loading">タスクを取得中...</div>
+        <h2>タスクフロー</h2>
+        <div id="taskFlow">
+          <div class="loading">タスクフローを取得中...</div>
         </div>
       </div>
 
@@ -683,10 +1054,10 @@
       </div>
 
       <div class="card">
-        <h2>最近のアクティビティ</h2>
-        <ul class="activity-list" id="activityList">
-          <li class="loading">アクティビティを取得中...</li>
-        </ul>
+        <h2>金稼ぎ戦略の概要</h2>
+        <div id="strategyOverview">
+          <div class="loading">戦略データを取得中...</div>
+        </div>
       </div>
 
       <div class="card full-width">
@@ -712,17 +1083,17 @@
 
   <!-- 意見・提案タブ -->
   <div id="tab-suggestions" class="tab-content">
-    <div class="grid">
-      <div class="card">
-        <h2>新しい提案を投稿</h2>
+    <div class="suggestions-layout">
+      <div class="card suggestion-form-card">
+        <h2>提案を投稿</h2>
         <form class="suggestion-form" onsubmit="submitSuggestion(event)">
           <div class="form-group">
             <label for="suggestionTitle">タイトル</label>
-            <input type="text" id="suggestionTitle" placeholder="提案のタイトル" required>
+            <input type="text" id="suggestionTitle" placeholder="タイトル" required>
           </div>
           <div class="form-group">
             <label for="suggestionContent">内容</label>
-            <textarea id="suggestionContent" placeholder="提案の詳細を記入してください" required></textarea>
+            <textarea id="suggestionContent" placeholder="詳細を記入" required></textarea>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -744,15 +1115,26 @@
               </select>
             </div>
           </div>
-          <button type="submit" class="btn-primary">提案を送信</button>
+          <button type="submit" class="btn-primary">送信</button>
         </form>
       </div>
 
-      <div class="card">
+      <div class="card suggestion-list-card">
         <h2>提案一覧</h2>
-        <ul class="suggestion-list" id="suggestionList">
-          <li class="loading">提案を取得中...</li>
-        </ul>
+        <div class="suggestion-status-tabs" id="suggestionTabs">
+          <div class="status-tab-buttons">
+            <button class="status-tab-btn active" data-status="pending">未処理 <span class="tab-count" id="tabCountPending">0</span></button>
+            <button class="status-tab-btn" data-status="accepted">採択 <span class="tab-count" id="tabCountAccepted">0</span></button>
+            <button class="status-tab-btn" data-status="rejected">却下 <span class="tab-count" id="tabCountRejected">0</span></button>
+            <button class="status-tab-btn" data-status="implemented">実装済 <span class="tab-count" id="tabCountImplemented">0</span></button>
+            <button class="status-tab-btn" data-status="deferred">保留 <span class="tab-count" id="tabCountDeferred">0</span></button>
+          </div>
+          <div class="status-tab-content active" id="tabPending"></div>
+          <div class="status-tab-content" id="tabAccepted"></div>
+          <div class="status-tab-content" id="tabRejected"></div>
+          <div class="status-tab-content" id="tabImplemented"></div>
+          <div class="status-tab-content" id="tabDeferred"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -772,6 +1154,13 @@
         <div id="notificationHistory" style="max-height: 400px; overflow-y: auto;">
           <div class="loading">履歴を取得中...</div>
         </div>
+      </div>
+
+      <div class="card">
+        <h2>最近のアクティビティ</h2>
+        <ul class="activity-list" id="activityList">
+          <li class="loading">アクティビティを取得中...</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -819,6 +1208,7 @@
       } else if (tabName === 'notifications') {
         fetchNotificationSettings();
         fetchNotificationHistory();
+        fetchActivity();
       }
     }
 
@@ -854,8 +1244,9 @@
     }
 
     function handleWebSocketMessage(data) {
-      if (data.type === 'task') {
-        updateCurrentTask(data.data);
+      if (data.type === 'phase') {
+        // タスクフローを更新（スケジューラーデータを再取得）
+        fetchTaskFlow();
       } else if (data.type === 'finance') {
         fetchFinance();
       }
@@ -892,13 +1283,13 @@
       }
     }
 
-    async function fetchCurrentTask() {
+    async function fetchTaskFlow() {
       try {
-        const res = await fetch(`${API_BASE}/api/task`);
+        const res = await fetch(`${API_BASE}/api/scheduler`);
         const data = await res.json();
-        updateCurrentTask(data);
+        updateTaskFlow(data);
       } catch (error) {
-        console.error('Failed to fetch current task:', error);
+        console.error('Failed to fetch task flow:', error);
       }
     }
 
@@ -909,6 +1300,16 @@
         updateActivity(data);
       } catch (error) {
         console.error('Failed to fetch activity:', error);
+      }
+    }
+
+    async function fetchStrategies() {
+      try {
+        const res = await fetch(`${API_BASE}/api/strategies`);
+        const data = await res.json();
+        updateStrategyOverview(data);
+      } catch (error) {
+        console.error('Failed to fetch strategies:', error);
       }
     }
 
@@ -1000,17 +1401,82 @@
       document.getElementById('remainingBudget').textContent = `¥${data.remainingBudget.toLocaleString()}`;
     }
 
-    function updateCurrentTask(task) {
-      const container = document.getElementById('currentTask');
-      if (task && task.status !== 'idle') {
-        container.innerHTML = `
-          <div class="stat">
-            <span>${task.description || task.message}</span>
-            <span>${task.status}</span>
+    function updateTaskFlow(schedulerData) {
+      const container = document.getElementById('taskFlow');
+
+      if (!schedulerData || !schedulerData.tasks || schedulerData.tasks.length === 0) {
+        container.innerHTML = '<div class="task-flow-empty">スケジュールタスクがありません</div>';
+        return;
+      }
+
+      const now = new Date();
+      const tasks = schedulerData.tasks;
+
+      // 有効なタスクのみフィルタ
+      const enabledTasks = tasks.filter(t => t.enabled);
+
+      // 次回実行タスク（時間順でソート）
+      const upcomingTasks = enabledTasks
+        .filter(t => t.nextRun && new Date(t.nextRun) > now)
+        .sort((a, b) => new Date(a.nextRun) - new Date(b.nextRun))
+        .slice(0, 3);
+
+      // 直近実行タスク（最終実行時間でソート）
+      const recentTasks = enabledTasks
+        .filter(t => t.lastRun)
+        .sort((a, b) => new Date(b.lastRun) - new Date(a.lastRun))
+        .slice(0, 2);
+
+      let html = '';
+
+      // 次回実行セクション
+      html += '<div class="task-flow-section">';
+      html += '<div class="task-flow-label">⏰ 次回実行</div>';
+      if (upcomingTasks.length > 0) {
+        html += upcomingTasks.map(task => `
+          <div class="task-flow-item next">
+            <div class="task-flow-name">${escapeHtml(task.name)}</div>
+            <div class="task-flow-time">${formatRelativeTime(task.nextRun)}</div>
           </div>
-        `;
+        `).join('');
       } else {
-        container.innerHTML = '<div class="loading">現在実行中のタスクはありません</div>';
+        html += '<div class="task-flow-empty">予定なし</div>';
+      }
+      html += '</div>';
+
+      // 直近実行セクション
+      html += '<div class="task-flow-section">';
+      html += '<div class="task-flow-label">✓ 直近実行</div>';
+      if (recentTasks.length > 0) {
+        html += recentTasks.map(task => `
+          <div class="task-flow-item completed">
+            <div class="task-flow-name">${escapeHtml(task.name)}</div>
+            <div class="task-flow-time">${formatRelativeTime(task.lastRun)}</div>
+          </div>
+        `).join('');
+      } else {
+        html += '<div class="task-flow-empty">実行履歴なし</div>';
+      }
+      html += '</div>';
+
+      container.innerHTML = html;
+    }
+
+    function formatElapsedTime(startedAt) {
+      if (!startedAt) return '不明';
+      const start = new Date(startedAt);
+      const now = new Date();
+      const diffMs = now.getTime() - start.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+
+      if (diffHours > 0) {
+        return `${diffHours}時間${diffMins % 60}分`;
+      } else if (diffMins > 0) {
+        return `${diffMins}分`;
+      } else {
+        return `${diffSecs}秒`;
       }
     }
 
@@ -1042,7 +1508,10 @@
         return;
       }
 
-      list.innerHTML = activities.map(activity => {
+      // 最新5件に制限
+      const recentActivities = activities.slice(0, 5);
+
+      list.innerHTML = recentActivities.map(activity => {
         const time = new Date(activity.timestamp);
         const timeStr = time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
         const icon = activity.success ? '✓' : '✗';
@@ -1057,40 +1526,170 @@
       }).join('');
     }
 
-    function updateSuggestions(suggestions) {
-      const list = document.getElementById('suggestionList');
+    function updateStrategyOverview(strategies) {
+      const container = document.getElementById('strategyOverview');
 
-      if (!suggestions || suggestions.length === 0) {
-        list.innerHTML = '<li class="loading">提案はまだありません</li>';
+      if (!strategies || strategies.length === 0) {
+        container.innerHTML = '<div class="strategy-empty">戦略はまだありません</div>';
         return;
       }
 
-      list.innerHTML = suggestions.map(s => {
-        const responseHtml = s.systemResponse ? `
-          <div class="suggestion-response">
-            <h4>システムの回答</h4>
-            <p><strong>分析:</strong> ${escapeHtml(s.systemResponse.analysis)}</p>
-            <p><strong>判断:</strong> ${escapeHtml(s.systemResponse.decision)}</p>
-            ${s.systemResponse.actionPlan ? `<p><strong>アクションプラン:</strong> ${escapeHtml(s.systemResponse.actionPlan)}</p>` : ''}
+      // サマリー計算
+      const activeStrategies = strategies.filter(s => s.status === 'active');
+      const totalRevenue = strategies.reduce((sum, s) => sum + (s.metrics?.revenue || 0), 0);
+      const avgRoi = strategies.length > 0
+        ? strategies.reduce((sum, s) => sum + (s.metrics?.roi || 0), 0) / strategies.length
+        : 0;
+
+      let html = '';
+
+      // サマリー部分
+      html += `
+        <div class="strategy-summary">
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value">${activeStrategies.length} / ${strategies.length}</div>
+            <div class="strategy-summary-label">アクティブ戦略</div>
           </div>
-        ` : '';
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value ${totalRevenue >= 0 ? 'positive' : 'negative'}">¥${totalRevenue.toLocaleString()}</div>
+            <div class="strategy-summary-label">総収益</div>
+          </div>
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value ${avgRoi >= 0 ? 'positive' : 'negative'}">${avgRoi.toFixed(1)}%</div>
+            <div class="strategy-summary-label">平均ROI</div>
+          </div>
+        </div>
+      `;
+
+      // 戦略リスト
+      html += '<ul class="strategy-list">';
+      html += strategies.map(strategy => {
+        const metrics = strategy.metrics || {};
+        const roi = metrics.roi || 0;
+        const roiClass = roi >= 0 ? 'positive' : 'negative';
 
         return `
-          <li class="suggestion-item">
-            <div class="suggestion-header">
-              <span class="suggestion-title">${escapeHtml(s.title)}</span>
-              <span class="suggestion-status status-${s.status}">${getStatusLabel(s.status)}</span>
+          <li class="strategy-item">
+            <div class="strategy-header">
+              <span class="strategy-name">${escapeHtml(strategy.name)}</span>
+              <span class="strategy-status strategy-status-${strategy.status}">${getStrategyStatusLabel(strategy.status)}</span>
             </div>
-            <div class="suggestion-content">${escapeHtml(s.content)}</div>
-            <div class="suggestion-meta">
-              <span class="badge badge-${s.category}">${getCategoryLabel(s.category)}</span>
-              <span class="badge badge-${s.priority}">${getPriorityLabel(s.priority)}</span>
-              <span>${formatDate(s.createdAt)}</span>
+            <div class="strategy-metrics">
+              <span>収益: ¥${(metrics.revenue || 0).toLocaleString()}</span>
+              <span>コスト: ¥${(metrics.cost || 0).toLocaleString()}</span>
+              <span class="strategy-roi ${roiClass}">ROI: ${roi.toFixed(1)}%</span>
+              <span>実行: ${metrics.executionCount || 0}回</span>
             </div>
-            ${responseHtml}
           </li>
         `;
       }).join('');
+      html += '</ul>';
+
+      container.innerHTML = html;
+    }
+
+    function getStrategyStatusLabel(status) {
+      const labels = {
+        active: 'アクティブ',
+        draft: '下書き',
+        paused: '停止中',
+        pending: '承認待ち',
+        completed: '完了',
+        failed: '失敗',
+      };
+      return labels[status] || status;
+    }
+
+    function updateSuggestions(suggestions) {
+      // ステータス別にグループ化
+      const byStatus = {
+        pending: [],
+        accepted: [],
+        rejected: [],
+        implemented: [],
+        deferred: [],
+      };
+
+      if (suggestions && suggestions.length > 0) {
+        suggestions.forEach(s => {
+          const status = s.status || 'pending';
+          if (byStatus[status]) {
+            byStatus[status].push(s);
+          } else {
+            byStatus.pending.push(s);
+          }
+        });
+      }
+
+      // タブ形式の更新
+      updateTabView(byStatus);
+    }
+
+    function updateTabView(byStatus) {
+      const statuses = ['pending', 'accepted', 'rejected', 'implemented', 'deferred'];
+
+      statuses.forEach(status => {
+        const items = byStatus[status];
+        const container = document.getElementById(`tab${capitalizeFirst(status)}`);
+        const countEl = document.getElementById(`tabCount${capitalizeFirst(status)}`);
+
+        if (countEl) countEl.textContent = items.length;
+
+        if (!container) return;
+
+        if (items.length === 0) {
+          container.innerHTML = '<div class="kanban-empty">なし</div>';
+          return;
+        }
+
+        container.innerHTML = items.map(s => renderSuggestionItem(s)).join('');
+      });
+
+      // タブ切り替えイベント
+      document.querySelectorAll('.status-tab-btn').forEach(btn => {
+        btn.onclick = () => {
+          const status = btn.dataset.status;
+          document.querySelectorAll('.status-tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.status-tab-content').forEach(c => c.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById(`tab${capitalizeFirst(status)}`).classList.add('active');
+        };
+      });
+    }
+
+    function renderSuggestionItem(s) {
+      const responseHtml = s.systemResponse ? `
+        <div class="suggestion-response">
+          <h4>システムの回答</h4>
+          <p><strong>分析:</strong> ${escapeHtml(s.systemResponse.analysis)}</p>
+          <p><strong>判断:</strong> ${escapeHtml(s.systemResponse.decision)}</p>
+          ${s.systemResponse.actionPlan ? `<p><strong>アクションプラン:</strong> ${escapeHtml(s.systemResponse.actionPlan)}</p>` : ''}
+        </div>
+      ` : '';
+
+      return `
+        <div class="suggestion-item">
+          <div class="suggestion-header">
+            <div class="suggestion-header-left">
+              <span class="suggestion-title">${escapeHtml(s.title)}</span>
+            </div>
+            <div class="suggestion-header-right">
+              <span class="badge badge-${s.category}">${getCategoryLabel(s.category)}</span>
+              <span class="badge badge-${s.priority}">${getPriorityLabel(s.priority)}</span>
+              <span class="suggestion-status status-${s.status}">${getStatusLabel(s.status)}</span>
+            </div>
+          </div>
+          <div class="suggestion-content">${escapeHtml(s.content)}</div>
+          <div class="suggestion-meta">
+            <span>${formatDate(s.createdAt)}</span>
+          </div>
+          ${responseHtml}
+        </div>
+      `;
+    }
+
+    function capitalizeFirst(str) {
+      return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
     function updateDailyReports(reports) {
@@ -1198,6 +1797,7 @@
         { key: 'error', icon: 'error', name: 'エラー', desc: '処理エラーなど' },
         { key: 'critical', icon: 'priority_high', name: '重大', desc: '緊急対応が必要なエラー' },
         { key: 'audit', icon: 'assignment', name: '監査', desc: '監査ログ（通常無効）' },
+        { key: 'suggestionResponse', icon: 'chat', name: '提案への回答', desc: '提案に対するシステムの回答通知' },
       ];
 
       const typeIcons = {
@@ -1207,6 +1807,7 @@
         error: '&#x274C;',
         critical: '&#x1F6A8;',
         audit: '&#x1F4CB;',
+        suggestionResponse: '&#x1F4AC;',
       };
 
       container.innerHTML = types.map(type => `
@@ -1241,6 +1842,7 @@
         error: '&#x274C;',
         critical: '&#x1F6A8;',
         audit: '&#x1F4CB;',
+        suggestionResponse: '&#x1F4AC;',
       };
 
       container.innerHTML = history.map(item => `
@@ -1504,18 +2106,18 @@
     // 初期化
     connectWebSocket();
     fetchStatus();
+    fetchTaskFlow();
     fetchFinance();
     fetchRequests();
-    fetchCurrentTask();
-    fetchActivity();
+    fetchStrategies();
     fetchSchedulerTasks();
 
     // 定期更新
-    setInterval(fetchStatus, 60000);
+    setInterval(fetchStatus, 30000);
+    setInterval(fetchTaskFlow, 30000);
     setInterval(fetchFinance, 60000);
     setInterval(fetchRequests, 30000);
-    setInterval(fetchCurrentTask, 10000);
-    setInterval(fetchActivity, 30000);
+    setInterval(fetchStrategies, 60000);
     setInterval(fetchSchedulerTasks, 60000);
   </script>
 </body>

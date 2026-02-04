@@ -17,6 +17,7 @@ export interface NotificationSettings {
     error: boolean;
     critical: boolean;
     audit: boolean;
+    suggestionResponse: boolean;
   };
 }
 
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
     error: true,
     critical: true,
     audit: false,
+    suggestionResponse: true,
   },
 };
 
@@ -45,7 +47,11 @@ function loadSettings(): NotificationSettings {
   try {
     if (existsSync(SETTINGS_PATH)) {
       const content = readFileSync(SETTINGS_PATH, 'utf-8');
-      return JSON.parse(content);
+      const loaded = JSON.parse(content);
+      // デフォルト設定とマージ（後方互換性）
+      return {
+        discord: { ...DEFAULT_SETTINGS.discord, ...loaded.discord },
+      };
     }
   } catch (error) {
     logger.warn('Failed to load notification settings, using defaults', { error });
@@ -89,7 +95,7 @@ export interface DiscordConfig {
 }
 
 export interface DiscordMessage {
-  type: 'info' | 'success' | 'warning' | 'error' | 'critical' | 'audit';
+  type: 'info' | 'success' | 'warning' | 'error' | 'critical' | 'audit' | 'suggestionResponse';
   title: string;
   description?: string;
   fields?: Array<{ name: string; value: string; inline?: boolean }>;
@@ -112,6 +118,7 @@ const TYPE_COLORS: Record<DiscordMessage['type'], number> = {
   error: 0xe74c3c,
   critical: 0x9b59b6,
   audit: 0x95a5a6,
+  suggestionResponse: 0x1abc9c,
 };
 
 export class DiscordNotifier {
@@ -213,6 +220,10 @@ export class DiscordNotifier {
     return this.send({ ...message, type: 'critical' });
   }
 
+  async sendSuggestionResponse(title: string, description?: string, fields?: DiscordMessage['fields']): Promise<boolean> {
+    return this.send({ type: 'suggestionResponse', title, description, fields });
+  }
+
   private createEmbed(message: DiscordMessage): DiscordEmbed {
     const typeIcons: Record<DiscordMessage['type'], string> = {
       info: 'ℹ️',
@@ -221,6 +232,7 @@ export class DiscordNotifier {
       error: '❌',
       critical: '🚨',
       audit: '📋',
+      suggestionResponse: '💬',
     };
 
     return {
