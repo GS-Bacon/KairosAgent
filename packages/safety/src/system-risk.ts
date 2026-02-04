@@ -63,7 +63,7 @@ export class SystemRiskMonitor {
     }
 
     // プロセス数チェック
-    if (resources.processCount > 100) {
+    if (resources.processCount > 1500) {
       issues.push(`プロセス数が多い: ${resources.processCount}`);
       riskLevel = Math.max(riskLevel, RiskLevel.MEDIUM);
     }

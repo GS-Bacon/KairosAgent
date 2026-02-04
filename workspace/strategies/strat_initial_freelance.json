@@ -1,0 +1,25 @@
+{
+  "id": "strat_initial_freelance",
+  "name": "小規模フリーランス案件",
+  "description": "CrowdWorks、Lancers、ココナラなどで小規模なプログラミング・自動化案件を受注。スクレイピング、データ処理、簡単なWebツール作成などを中心に、低リスクで確実な収益を得る。",
+  "type": "freelance",
+  "status": "draft",
+  "expectedRevenue": 1500,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-04T09:30:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["crowdworks", "lancers", "coconala"],
+    "skillsToOffer": ["Python自動化", "スクレイピング", "データ分析", "API連携"],
+    "maxConcurrentProjects": 2,
+    "minHourlyRate": 1000
+  }
+}
