@@ -155,6 +155,13 @@ export class DiscordNotifier {
     async sendSuggestionResponse(title, description, fields) {
         return this.send({ type: 'suggestionResponse', title, description, fields });
     }
+    async sendRateLimitAlert(isActive, details) {
+        return this.send({
+            type: isActive ? 'warning' : 'info',
+            title: isActive ? 'レートリミット検出' : 'レートリミット解除',
+            description: details,
+        });
+    }
     createEmbed(message) {
         const typeIcons = {
             info: 'ℹ️',

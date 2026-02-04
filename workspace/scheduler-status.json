@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-02-04T10:35:50.521Z",
+  "timestamp": "2026-02-04T15:07:15.166Z",
   "tasks": [
     {
       "id": "health_check",
       "name": "ヘルスチェック",
       "enabled": true,
-      "lastRun": "2026-02-04T10:30:49.392Z",
-      "nextRun": "2026-02-04T10:35:49.392Z",
+      "lastRun": "2026-02-04T15:02:14.006Z",
+      "nextRun": "2026-02-04T15:07:14.006Z",
       "intervalMs": 300000,
       "cronExpression": null
     },
@@ -14,8 +14,8 @@
       "id": "suggestion_check",
       "name": "提案チェック",
       "enabled": true,
-      "lastRun": "2026-02-04T10:35:43.125Z",
-      "nextRun": "2026-02-04T10:40:43.125Z",
+      "lastRun": "2026-02-04T15:02:10.515Z",
+      "nextRun": "2026-02-04T15:07:10.534Z",
       "intervalMs": 300000,
       "cronExpression": null
     },
@@ -23,8 +23,8 @@
       "id": "heartbeat",
       "name": "ハートビート通知",
       "enabled": true,
-      "lastRun": "2026-02-04T10:20:41.611Z",
-      "nextRun": "2026-02-04T10:50:41.611Z",
+      "lastRun": "2026-02-04T14:37:15.454Z",
+      "nextRun": "2026-02-04T15:07:15.454Z",
       "intervalMs": 1800000,
       "cronExpression": null
     },
@@ -59,8 +59,17 @@
       "id": "strategy_execution",
       "name": "戦略実行",
       "enabled": true,
-      "lastRun": "2026-02-04T10:20:40.621Z",
-      "nextRun": "2026-02-04T10:50:40.621Z",
+      "lastRun": "2026-02-04T14:47:10.906Z",
+      "nextRun": "2026-02-04T15:17:10.906Z",
+      "intervalMs": 1800000,
+      "cronExpression": null
+    },
+    {
+      "id": "implement_accepted",
+      "name": "採択提案の自動実装",
+      "enabled": true,
+      "lastRun": "2026-02-04T15:07:14.488Z",
+      "nextRun": "2026-02-04T15:37:14.488Z",
       "intervalMs": 1800000,
       "cronExpression": null
     },
@@ -68,8 +77,8 @@
       "id": "improvement_seek",
       "name": "改善機会探索",
       "enabled": true,
-      "lastRun": null,
-      "nextRun": "2026-02-04T10:50:39.979Z",
+      "lastRun": "2026-02-04T15:03:20.273Z",
+      "nextRun": "2026-02-04T16:03:20.274Z",
       "intervalMs": 3600000,
       "cronExpression": null
     },
@@ -77,8 +86,8 @@
       "id": "approval_cleanup",
       "name": "承認リクエストクリーンアップ",
       "enabled": true,
-      "lastRun": null,
-      "nextRun": "2026-02-04T10:50:39.979Z",
+      "lastRun": "2026-02-04T15:03:20.274Z",
+      "nextRun": "2026-02-04T16:03:20.274Z",
       "intervalMs": 3600000,
       "cronExpression": null
     },
@@ -86,8 +95,8 @@
       "id": "resource_monitor",
       "name": "リソース監視",
       "enabled": true,
-      "lastRun": "2026-02-04T10:35:41.666Z",
-      "nextRun": "2026-02-04T10:40:41.666Z",
+      "lastRun": "2026-02-04T15:07:10.741Z",
+      "nextRun": "2026-02-04T15:12:10.741Z",
       "intervalMs": 300000,
       "cronExpression": null
     },
@@ -95,10 +104,73 @@
       "id": "loss_check",
       "name": "損失チェック",
       "enabled": true,
-      "lastRun": "2026-02-04T10:30:40.722Z",
-      "nextRun": "2026-02-04T10:40:40.722Z",
+      "lastRun": "2026-02-04T14:57:15.105Z",
+      "nextRun": "2026-02-04T15:07:15.106Z",
       "intervalMs": 600000,
       "cronExpression": null
+    },
+    {
+      "id": "strategy_activation",
+      "name": "戦略自動アクティベーション",
+      "enabled": true,
+      "lastRun": "2026-02-04T15:03:20.308Z",
+      "nextRun": "2026-02-04T16:03:20.308Z",
+      "intervalMs": 3600000,
+      "cronExpression": null
+    },
+    {
+      "id": "auto_improve",
+      "name": "自動改善処理",
+      "enabled": true,
+      "lastRun": "2026-02-04T15:03:20.342Z",
+      "nextRun": "2026-02-04T16:03:20.342Z",
+      "intervalMs": 3600000,
+      "cronExpression": null
+    },
+    {
+      "id": "improvement_verify",
+      "name": "改善検証",
+      "enabled": true,
+      "lastRun": null,
+      "nextRun": "2026-02-05T07:00:00.000Z",
+      "intervalMs": null,
+      "cronExpression": "0 7 * * *"
+    },
+    {
+      "id": "system_diagnosis",
+      "name": "システム診断",
+      "enabled": true,
+      "lastRun": null,
+      "nextRun": "2026-02-05T05:00:00.000Z",
+      "intervalMs": null,
+      "cronExpression": "0 5 * * *"
+    },
+    {
+      "id": "weekly_retrospective",
+      "name": "週次振り返り",
+      "enabled": true,
+      "lastRun": null,
+      "nextRun": "2026-02-04T21:00:00.000Z",
+      "intervalMs": null,
+      "cronExpression": "0 21 * * 0"
+    },
+    {
+      "id": "pattern_extraction",
+      "name": "成功パターン抽出",
+      "enabled": true,
+      "lastRun": null,
+      "nextRun": "2026-02-05T09:00:00.000Z",
+      "intervalMs": null,
+      "cronExpression": "0 9 * * 6"
+    },
+    {
+      "id": "doc_sync_check",
+      "name": "ドキュメント同期チェック",
+      "enabled": true,
+      "lastRun": null,
+      "nextRun": "2026-02-05T08:00:00.000Z",
+      "intervalMs": null,
+      "cronExpression": "0 8 * * *"
     }
   ]
 }

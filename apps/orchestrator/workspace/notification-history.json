@@ -1,5 +1,296 @@
 [
   {
+    "id": "notif_1770217636584_iuxq8y9",
+    "type": "info",
+    "title": "ハートビート",
+    "description": "稼働時間: 63分, 状態: healthy",
+    "timestamp": "2026-02-04T15:07:16.584Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770216430453_9bp0mti",
+    "type": "info",
+    "title": "戦略実行サイクル完了",
+    "description": "0/3戦略成功\n総収益: ¥0",
+    "timestamp": "2026-02-04T14:47:10.453Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770216430298_wg5ydyb",
+    "type": "warning",
+    "title": "戦略実行失敗",
+    "description": "小規模フリーランス案件: 1/2ステップ完了。一部失敗あり。",
+    "timestamp": "2026-02-04T14:47:10.298Z",
+    "sent": false,
+    "reason": "送信エラー: fetch failed"
+  },
+  {
+    "id": "notif_1770216370300_384lis6",
+    "type": "warning",
+    "title": "戦略実行失敗",
+    "description": "技術系アフィリエイト記事作成: 6/7ステップ完了。一部失敗あり。",
+    "timestamp": "2026-02-04T14:46:10.300Z",
+    "sent": false,
+    "reason": "送信エラー: fetch failed"
+  },
+  {
+    "id": "notif_1770215834272_0ubjzvg",
+    "type": "warning",
+    "title": "戦略実行失敗",
+    "description": "デジタルプロダクト販売: 3/4ステップ完了。一部失敗あり。",
+    "timestamp": "2026-02-04T14:37:14.272Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770215834353_sqpfot8",
+    "type": "info",
+    "title": "ハートビート",
+    "description": "稼働時間: 33分, 状態: healthy",
+    "timestamp": "2026-02-04T14:37:14.353Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770214584506_xbb40jt",
+    "type": "info",
+    "title": "戦略実行サイクル完了",
+    "description": "1/3戦略成功\n総収益: ¥0",
+    "timestamp": "2026-02-04T14:16:24.506Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770214583944_jcat10n",
+    "type": "warning",
+    "title": "戦略実行失敗",
+    "description": "小規模フリーランス案件: 高リスク計画のため承認待ち",
+    "timestamp": "2026-02-04T14:16:23.944Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770214582976_nia6h4p",
+    "type": "warning",
+    "title": "承認リクエスト: 戦略実行承認: 小規模フリーランス案件",
+    "description": "計画内容:\n- 案件検索: 各プラットフォームでスクレイピング、データ処理、Web自動化関連の案件を検索\n- 案件フィルタリング・評価: 検索結果から最適な案件を選定。難易度、報酬、納期、クライアント評価を総合評価\n- 提案文作成: 選定した案件に対してカスタマイズされた提案文を作成\n- 案件応募: 作成した提案文で案件に応募\n- 応募状況追跡: 応募済み案件の状況を監視し、返信があれば通知\n- 契約締結: 採用された場合、契約条件を確認し締結",
+    "timestamp": "2026-02-04T14:16:22.976Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770214550734_25nvut6",
+    "type": "warning",
+    "title": "戦略実行失敗",
+    "description": "技術系アフィリエイト記事作成: 6/7ステップ完了。一部失敗あり。",
+    "timestamp": "2026-02-04T14:15:50.734Z",
+    "sent": false,
+    "reason": "送信エラー: fetch failed"
+  },
+  {
+    "id": "notif_1770213800203_lxaqodv",
+    "type": "success",
+    "title": "システム起動",
+    "description": "AutoClaudeKMP が起動しました",
+    "timestamp": "2026-02-04T14:03:20.203Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770213697054_1fz5nuu",
+    "type": "success",
+    "title": "システム起動",
+    "description": "AutoClaudeKMP が起動しました",
+    "timestamp": "2026-02-04T14:01:37.054Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770213665209_ui6ypxy",
+    "type": "success",
+    "title": "システム起動",
+    "description": "AutoClaudeKMP が起動しました",
+    "timestamp": "2026-02-04T14:01:05.209Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770212910776_91619e8",
+    "type": "info",
+    "title": "ハートビート",
+    "description": "稼働時間: 90分, 状態: healthy",
+    "timestamp": "2026-02-04T13:48:30.776Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770212307296_wojuuud",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「改善について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T13:38:27.296Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211976689_fd1rdk1",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「通知処理について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T13:32:56.689Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211616011_t5cv78f",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「提案について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T13:26:56.011Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211225279_h9lo8ue",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「提案自体について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T13:20:25.279Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211113951_2yc9b08",
+    "type": "success",
+    "title": "戦略自動アクティベート",
+    "description": "小規模フリーランス案件\n理由: 実行可能で低リスク、ROI 100%\n推定成功率: 50%",
+    "timestamp": "2026-02-04T13:18:33.951Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211113566_9xs7icw",
+    "type": "success",
+    "title": "戦略アクティブ化",
+    "description": "小規模フリーランス案件 がアクティブになりました",
+    "timestamp": "2026-02-04T13:18:33.566Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211109965_06cordv",
+    "type": "success",
+    "title": "戦略自動アクティベート",
+    "description": "技術系アフィリエイト記事作成\n理由: 実行可能で低リスク、ROI 100%\n推定成功率: 50%",
+    "timestamp": "2026-02-04T13:18:29.965Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211109581_w5q0caa",
+    "type": "success",
+    "title": "戦略アクティブ化",
+    "description": "技術系アフィリエイト記事作成 がアクティブになりました",
+    "timestamp": "2026-02-04T13:18:29.581Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211106092_itlnhge",
+    "type": "info",
+    "title": "ハートビート",
+    "description": "稼働時間: 60分, 状態: healthy",
+    "timestamp": "2026-02-04T13:18:26.092Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211105899_74odja7",
+    "type": "success",
+    "title": "戦略自動アクティベート",
+    "description": "デジタルプロダクト販売\n理由: 実行可能で低リスク、ROI 100%\n推定成功率: 50%",
+    "timestamp": "2026-02-04T13:18:25.899Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770211104916_n5cz9ub",
+    "type": "success",
+    "title": "戦略アクティブ化",
+    "description": "デジタルプロダクト販売 がアクティブになりました",
+    "timestamp": "2026-02-04T13:18:24.916Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770210503867_4qn3p8x",
+    "type": "warning",
+    "title": "提案実装失敗",
+    "description": "「改善について」の実装に失敗しました: Process exited with code 143",
+    "timestamp": "2026-02-04T13:08:23.867Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770210203470_5ikl3dg",
+    "type": "warning",
+    "title": "提案実装失敗",
+    "description": "「通知処理について」の実装に失敗しました: Process exited with code 143",
+    "timestamp": "2026-02-04T13:03:23.470Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770209903004_da2t7md",
+    "type": "warning",
+    "title": "提案実装失敗",
+    "description": "「提案について」の実装に失敗しました: Process exited with code 143",
+    "timestamp": "2026-02-04T12:58:23.004Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770209602248_bxbdhjh",
+    "type": "warning",
+    "title": "提案実装失敗",
+    "description": "「提案自体について」の実装に失敗しました: Process exited with code 143",
+    "timestamp": "2026-02-04T12:53:22.248Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770209302714_zrjjvos",
+    "type": "info",
+    "title": "ハートビート",
+    "description": "稼働時間: 30分, 状態: healthy",
+    "timestamp": "2026-02-04T12:48:22.714Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770208523562_2mllpml",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「提案について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T12:35:23.562Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770208192813_ukda442",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「ドキュメントについて」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T12:29:52.813Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770208192462_vvwgm6r",
+    "type": "info",
+    "title": "保留提案の自動却下",
+    "description": "「改善について」は再検討上限（5回）に達したため却下されました。",
+    "timestamp": "2026-02-04T12:29:52.462Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770207501477_ea4jqba",
+    "type": "success",
+    "title": "システム起動",
+    "description": "AutoClaudeKMP が起動しました",
+    "timestamp": "2026-02-04T12:18:21.477Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770207475451_lglrtdm",
+    "type": "info",
+    "title": "システム停止",
+    "description": "AutoClaudeKMP が停止しました",
+    "timestamp": "2026-02-04T12:17:55.451Z",
+    "sent": true
+  },
+  {
+    "id": "notif_1770207161920_67ufgmp",
+    "type": "success",
+    "title": "システム起動",
+    "description": "AutoClaudeKMP が起動しました",
+    "timestamp": "2026-02-04T12:12:41.920Z",
+    "sent": true
+  },
+  {
     "id": "notif_1770201342714_y4c9wq0",
     "type": "info",
     "title": "提案への回答",

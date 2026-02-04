@@ -5,13 +5,14 @@
     "content": "システム自体と金儲けどちらも複数のペルソナによるレビューなどで改善するなどAIの作業精度を上げる手法をと入れてはどうか",
     "category": "feature",
     "priority": "medium",
-    "status": "deferred",
+    "status": "rejected",
     "createdAt": "2026-02-04T09:10:30.364Z",
     "systemResponse": {
-      "analysis": "提案を受け付けました。カテゴリ: feature, 優先度: medium",
-      "decision": "検討の結果、保留とさせていただきます。リソースに余裕ができ次第対応を検討します。",
-      "respondedAt": "2026-02-04T09:49:44.831Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T12:29:52.434Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7t7u5h_2219adb4",
@@ -19,13 +20,14 @@
     "content": "安全モードなどの説明が足りない\nどっかにmdファイルとして残すのとこのダッシュボードで見れるようにできない？",
     "category": "feature",
     "priority": "medium",
-    "status": "deferred",
+    "status": "rejected",
     "createdAt": "2026-02-04T09:12:56.934Z",
     "systemResponse": {
-      "analysis": "提案を受け付けました。カテゴリ: feature, 優先度: medium",
-      "decision": "検討の結果、保留とさせていただきます。リソースに余裕ができ次第対応を検討します。",
-      "respondedAt": "2026-02-04T09:49:45.142Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T12:29:52.781Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7usf4v_1750717a",
@@ -33,14 +35,14 @@
     "content": "提案のタイトルとかカテゴリ、優先度はAIで判定して勝手につけてほしい\n",
     "category": "improvement",
     "priority": "high",
-    "status": "accepted",
+    "status": "rejected",
     "createdAt": "2026-02-04T09:56:56.864Z",
     "systemResponse": {
-      "analysis": "高優先度の提案として受け付けました。",
-      "decision": "優先的に検討します",
-      "actionPlan": "詳細な実装計画を作成中",
-      "respondedAt": "2026-02-04T10:00:40.692Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T13:20:25.249Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7ut0st_e029445b",
@@ -48,14 +50,14 @@
     "content": "リソースに余裕ができ次第ってなんや。対応検討ってほんとにされる？",
     "category": "question",
     "priority": "high",
-    "status": "accepted",
+    "status": "rejected",
     "createdAt": "2026-02-04T09:57:24.942Z",
     "systemResponse": {
-      "analysis": "高優先度の提案として受け付けました。",
-      "decision": "優先的に検討します",
-      "actionPlan": "詳細な実装計画を作成中",
-      "respondedAt": "2026-02-04T10:00:41.054Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T13:26:55.978Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7uupdb_7b5a6761",
@@ -63,13 +65,14 @@
     "content": "保留・解決・未処理でタブかカンバンみたいにするのはどうスクロール",
     "category": "feature",
     "priority": "medium",
-    "status": "deferred",
+    "status": "rejected",
     "createdAt": "2026-02-04T09:58:43.439Z",
     "systemResponse": {
-      "analysis": "提案を受け付けました。カテゴリ: feature, 優先度: medium",
-      "decision": "検討の結果、保留とさせていただきます。リソースに余裕ができ次第対応を検討します。",
-      "respondedAt": "2026-02-04T10:00:41.715Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T12:35:23.526Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7vtm6j_7c9cfb58",
@@ -77,14 +80,14 @@
     "content": "ダッシュボードでℹ️ ハートビートをOFFにしてるのにWebhookが流れてくる。",
     "category": "bug",
     "priority": "high",
-    "status": "accepted",
+    "status": "rejected",
     "createdAt": "2026-02-04T10:25:52.268Z",
     "systemResponse": {
-      "analysis": "バグ報告として受け付けました。内容: ダッシュボードでℹ️ ハートビートをOFFにしてるのにWebhookが流れてくる。...",
-      "decision": "調査を開始します",
-      "actionPlan": "次回のメンテナンスで対応予定",
-      "respondedAt": "2026-02-04T10:30:42.254Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T13:32:56.653Z"
+    },
+    "reviewCount": 5
   },
   {
     "id": "sug_ml7w24u9_9415ff98",
@@ -92,13 +95,13 @@
     "content": "分析: バグ報告として受け付けました。内容: ダッシュボードでℹ️ ハートビートをOFFにしてるのにWebhookが流れてくる。...\nみたいなの、分析結果になってない。判断も同様。なので分析と判断をした結果をちゃんと表示するようにして。",
     "category": "improvement",
     "priority": "high",
-    "status": "accepted",
+    "status": "rejected",
     "createdAt": "2026-02-04T10:32:29.697Z",
     "systemResponse": {
-      "analysis": "高優先度の提案として受け付けました。",
-      "decision": "優先的に検討します",
-      "actionPlan": "詳細な実装計画を作成中",
-      "respondedAt": "2026-02-04T10:35:42.713Z"
-    }
+      "analysis": "5回の再検討を行いましたが、現時点では採択できませんでした。",
+      "decision": "再検討上限に達したため、自動的に却下されました。必要であれば再度提案してください。",
+      "respondedAt": "2026-02-04T13:38:27.259Z"
+    },
+    "reviewCount": 5
   }
 ]

@@ -1,0 +1,371 @@
+{
+  "plan": {
+    "product_name": "KMP AI Starter Kit",
+    "concept": "Kotlin Multiplatformを活用したAI/LLM統合済みのクロスプラットフォームアプリ開発テンプレート。日本語ドキュメント完備で、国内開発者がすぐに本格的なAIアプリ開発を始められる",
+    "main_features": [
+      "Kotlin Multiplatform対応（Android/iOS/Desktop/Web）",
+      "OpenAI・Claude API統合済みのAIモジュール",
+      "チャットUI・ストリーミングレスポンス実装済み",
+      "認証・ユーザー管理の基盤コード",
+      "Compose Multiplatformによる共通UI",
+      "日本語ドキュメント・セットアップガイド",
+      "プロンプトテンプレート管理システム",
+      "レート制限・エラーハンドリング実装済み"
+    ],
+    "pricing": {
+      "basic": {
+        "price_usd": 39,
+        "price_jpy": 5800,
+        "includes": [
+          "基本テンプレート",
+          "日本語ドキュメント",
+          "6ヶ月アップデート"
+        ]
+      },
+      "pro": {
+        "price_usd": 99,
+        "price_jpy": 14800,
+        "includes": [
+          "全機能",
+          "サンプルアプリ3種",
+          "1年アップデート",
+          "Discordサポート"
+        ]
+      },
+      "team": {
+        "price_usd": 299,
+        "price_jpy": 44800,
+        "includes": [
+          "チームライセンス（5名）",
+          "優先サポート",
+          "カスタマイズ相談",
+          "永久アップデート"
+        ]
+      }
+    },
+    "format": {
+      "delivery": "GitHubリポジトリアクセス",
+      "platform": "Gumroad",
+      "contents": [
+        "ソースコード一式",
+        "セットアップガイド（PDF/Markdown）",
+        "アーキテクチャ解説動画（Pro以上）",
+        "サンプルアプリ（Pro以上）"
+      ]
+    },
+    "differentiation": [
+      "日本語ドキュメント完備（国内市場で希少価値）",
+      "KMP + AI統合は競合がほぼ不在",
+      "実践的なサンプルコード付き",
+      "継続的なアップデートサポート"
+    ],
+    "target_market": {
+      "primary": "日本国内の個人開発者・小規模チーム",
+      "secondary": "KMPに興味のあるグローバル開発者",
+      "pain_points": [
+        "KMPの学習コストが高い",
+        "AI統合の実装が複雑",
+        "英語ドキュメントのみで理解に時間がかかる"
+      ]
+    }
+  },
+  "content": {
+    "content_outline": {
+      "product_title": "KMP AI Starter Kit",
+      "tagline": "Kotlin Multiplatform × AI統合テンプレート - 日本語ドキュメント完備",
+      "sales_page_structure": {
+        "hero_section": {
+          "headline": "KMPでAIアプリを、今すぐ始めよう",
+          "subheadline": "Android・iOS・Desktop・Webに対応したAI統合済みテンプレート。日本語ドキュメントで迷わず開発スタート",
+          "cta_primary": "今すぐ購入",
+          "cta_secondary": "デモを見る"
+        },
+        "pain_points_section": {
+          "title": "こんな課題、ありませんか？",
+          "items": [
+            {
+              "problem": "KMPの学習コストが高すぎる",
+              "description": "公式ドキュメントは英語、設定も複雑で挫折しがち"
+            },
+            {
+              "problem": "AI API統合が思った以上に大変",
+              "description": "ストリーミング対応、エラーハンドリング、レート制限...考えることが多すぎる"
+            },
+            {
+              "problem": "クロスプラットフォーム対応で工数が膨らむ",
+              "description": "各プラットフォームごとの実装で開発期間が倍以上に"
+            }
+          ]
+        },
+        "solution_section": {
+          "title": "KMP AI Starter Kitが解決します",
+          "value_proposition": "動くコードから学ぶ、最速のKMP × AI開発",
+          "key_benefits": [
+            {
+              "benefit": "セットアップ時間を大幅短縮",
+              "description": "環境構築からHello Worldまで30分以内。日本語ガイドで迷いなく進められる"
+            },
+            {
+              "benefit": "AI統合済みですぐに開発開始",
+              "description": "OpenAI・Claude APIの接続、ストリーミングレスポンス、チャットUIが実装済み"
+            },
+            {
+              "benefit": "4プラットフォーム一括対応",
+              "description": "Compose Multiplatformで共通UI。1つのコードベースでAndroid/iOS/Desktop/Webに展開"
+            }
+          ]
+        },
+        "features_section": {
+          "title": "含まれる機能",
+          "feature_categories": [
+            {
+              "category": "AI/LLM統合",
+              "features": [
+                "OpenAI GPT-4/GPT-4o対応モジュール",
+                "Anthropic Claude API対応モジュール",
+                "ストリーミングレスポンス実装",
+                "プロンプトテンプレート管理システム",
+                "レート制限・リトライ処理"
+              ]
+            },
+            {
+              "category": "クロスプラットフォームUI",
+              "features": [
+                "Compose Multiplatform共通UI",
+                "チャットインターフェース",
+                "ダークモード対応",
+                "レスポンシブデザイン"
+              ]
+            },
+            {
+              "category": "基盤機能",
+              "features": [
+                "認証・ユーザー管理",
+                "ローカルデータ永続化",
+                "ネットワーク層（Ktor Client）",
+                "依存性注入（Koin）"
+              ]
+            },
+            {
+              "category": "開発者体験",
+              "features": [
+                "日本語セットアップガイド",
+                "アーキテクチャ解説",
+                "コードコメント日本語対応",
+                "トラブルシューティングガイド"
+              ]
+            }
+          ]
+        },
+        "social_proof_section": {
+          "title": "なぜKMP AI Starter Kitなのか",
+          "differentiators": [
+            {
+              "point": "日本語ドキュメント完備",
+              "detail": "国内市場で希少。英語の壁なく学習可能"
+            },
+            {
+              "point": "KMP × AI統合は競合不在",
+              "detail": "この組み合わせのテンプレートは市場にほぼ存在しない"
+            },
+            {
+              "point": "実践的なサンプルコード",
+              "detail": "動くアプリから逆引きで学べる構成"
+            },
+            {
+              "point": "継続的アップデート",
+              "detail": "KMP・AI APIの進化に追従"
+            }
+          ]
+        },
+        "pricing_section": {
+          "title": "プラン",
+          "plans": [
+            {
+              "name": "Basic",
+              "price_display": "¥5,800",
+              "price_usd": "$39",
+              "target": "個人開発者・学習目的",
+              "includes": [
+                "基本テンプレート一式",
+                "日本語セットアップガイド",
+                "6ヶ月間のアップデート"
+              ],
+              "cta": "Basicを購入"
+            },
+            {
+              "name": "Pro",
+              "price_display": "¥14,800",
+              "price_usd": "$99",
+              "target": "本格的にプロダクト開発したい方",
+              "badge": "人気",
+              "includes": [
+                "全機能・全モジュール",
+                "サンプルアプリ3種（チャットボット/RAG検索/音声AI）",
+                "アーキテクチャ解説動画",
+                "1年間のアップデート",
+                "Discordコミュニティサポート"
+              ],
+              "cta": "Proを購入"
+            },
+            {
+              "name": "Team",
+              "price_display": "¥44,800",
+              "price_usd": "$299",
+              "target": "チーム・企業での利用",
+              "includes": [
+                "チームライセンス（5名まで）",
+                "優先メールサポート",
+                "カスタマイズ相談（1時間）",
+                "永久アップデート"
+              ],
+              "cta": "Teamを購入"
+            }
+          ]
+        },
+        "faq_section": {
+          "title": "よくある質問",
+          "items": [
+            {
+              "question": "KMP初心者でも使えますか？",
+              "answer": "はい。日本語のステップバイステップガイドを用意しています。Kotlinの基礎知識があれば、ガイドに沿って環境構築からアプリ起動まで進められます。"
+            },
+            {
+              "question": "どのIDEが必要ですか？",
+              "answer": "Android Studio（推奨）またはIntelliJ IDEA Ultimateが必要です。iOS開発にはXcodeも必要です。"
+            },
+            {
+              "question": "AI APIの利用料金は含まれますか？",
+              "answer": "いいえ。OpenAIやAnthropicのAPIキーは別途ご自身でご用意ください。テンプレートには接続コードとベストプラクティスが含まれています。"
+            },
+            {
+              "question": "商用利用は可能ですか？",
+              "answer": "はい。全プランで商用利用可能です。テンプレートを基にしたアプリの販売・配布に制限はありません。"
+            },
+            {
+              "question": "返金保証はありますか？",
+              "answer": "購入後14日以内であれば、技術的な問題で利用できない場合に限り返金対応いたします。"
+            }
+          ]
+        },
+        "final_cta_section": {
+          "headline": "今日からKMP × AI開発を始めよう",
+          "subtext": "学習コストを最小化し、プロダクト開発に集中できる環境を手に入れる",
+          "cta": "プランを選択"
+        }
+      },
+      "deliverables_structure": {
+        "repository_structure": {
+          "description": "GitHubプライベートリポジトリへのアクセス権を付与",
+          "directories": [
+            {
+              "path": "/composeApp",
+              "description": "Compose Multiplatform共通UIコード"
+            },
+            {
+              "path": "/shared",
+              "description": "ビジネスロジック・AIモジュール"
+            },
+            {
+              "path": "/androidApp",
+              "description": "Androidアプリエントリポイント"
+            },
+            {
+              "path": "/iosApp",
+              "description": "iOSアプリ（SwiftUIラッパー）"
+            },
+            {
+              "path": "/desktopApp",
+              "description": "デスクトップアプリ設定"
+            },
+            {
+              "path": "/webApp",
+              "description": "Webアプリ（Kotlin/JS）"
+            },
+            {
+              "path": "/docs",
+              "description": "日本語ドキュメント一式"
+            },
+            {
+              "path": "/samples",
+              "description": "サンプルアプリ（Pro以上）"
+            }
+          ]
+        },
+        "documentation": {
+          "setup_guide": {
+            "format": [
+              "PDF",
+              "Markdown"
+            ],
+            "sections": [
+              "環境構築（Windows/Mac/Linux対応）",
+              "初回ビルド手順",
+              "APIキー設定方法",
+              "各プラットフォームでの実行方法",
+              "トラブルシューティング"
+            ]
+          },
+          "architecture_guide": {
+            "format": [
+              "PDF",
+              "Markdown"
+            ],
+            "sections": [
+              "プロジェクト構成解説",
+              "依存関係の説明",
+              "AIモジュールの仕組み",
+              "カスタマイズ方法",
+              "ベストプラクティス"
+            ]
+          },
+          "video_content": {
+            "availability": "Pro以上",
+            "videos": [
+              "クイックスタート（15分）",
+              "アーキテクチャ詳細解説（45分）",
+              "AI機能カスタマイズ（30分）"
+            ]
+          }
+        },
+        "sample_apps": {
+          "availability": "Pro以上",
+          "apps": [
+            {
+              "name": "AIチャットボット",
+              "description": "会話履歴保存、複数モデル切替対応のチャットアプリ"
+            },
+            {
+              "name": "RAGドキュメント検索",
+              "description": "ローカルドキュメントをベクトル検索するサンプル"
+            },
+            {
+              "name": "音声AI アシスタント",
+              "description": "音声入力→AI処理→音声出力のサンプル"
+            }
+          ]
+        }
+      },
+      "marketing_assets": {
+        "short_description": "Kotlin MultiplatformでAI搭載アプリを最速開発。日本語ドキュメント完備のスターターキット",
+        "long_description": "KMP AI Starter Kitは、Kotlin Multiplatformを使ったAIアプリ開発のためのテンプレートです。OpenAI・Claude API統合済み、Compose Multiplatformによる4プラットフォーム対応（Android/iOS/Desktop/Web）、そして日本語ドキュメント完備。学習コストを最小化し、今すぐプロダクト開発を始められます。",
+        "key_selling_points": [
+          "日本語ドキュメント完備 - 英語の壁なく学習可能",
+          "AI統合済み - OpenAI・Claude対応、ストリーミング実装済み",
+          "4プラットフォーム対応 - 1コードベースで全展開",
+          "実践的サンプル - 動くコードから学べる"
+        ],
+        "target_keywords": [
+          "Kotlin Multiplatform",
+          "KMP",
+          "AI アプリ開発",
+          "ChatGPT API",
+          "Claude API",
+          "Compose Multiplatform",
+          "クロスプラットフォーム",
+          "日本語 テンプレート"
+        ]
+      }
+    }
+  }
+}

@@ -61,6 +61,7 @@ export declare class DiscordNotifier {
     sendError(title: string, description?: string): Promise<boolean>;
     sendCritical(message: Omit<DiscordMessage, 'type'>): Promise<boolean>;
     sendSuggestionResponse(title: string, description?: string, fields?: DiscordMessage['fields']): Promise<boolean>;
+    sendRateLimitAlert(isActive: boolean, details?: string): Promise<boolean>;
     private createEmbed;
     isConfigured(): boolean;
     setWebhookUrl(url: string): void;

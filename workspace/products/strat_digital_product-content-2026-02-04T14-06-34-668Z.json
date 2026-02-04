@@ -1,0 +1,508 @@
+{
+  "plan": {
+    "product_plan": {
+      "product_name": "AI-Ready SaaS Starter Kit Pro",
+      "product_name_ja": "AI-Ready SaaS スターターキット Pro",
+      "concept": {
+        "summary": "AI機能を簡単に組み込めるSaaSアプリケーションのフルスタックテンプレート",
+        "description": "日本語ドキュメント完備、OpenAI/Claude API統合済みのモダンなSaaSボイラープレート。認証、決済、AI機能がすぐに使える状態で、開発者が数週間かかる初期セットアップを数時間に短縮",
+        "tagline": "AIを搭載したSaaSを、今日から始めよう"
+      },
+      "main_features": [
+        {
+          "feature": "AI機能プリセット",
+          "details": "OpenAI GPT-4、Claude API、画像生成AIの統合コード付き。チャットボット、コンテンツ生成、要約機能をすぐに実装可能"
+        },
+        {
+          "feature": "認証・決済システム",
+          "details": "NextAuth.js + Stripe/Lemon Squeezy統合。サブスクリプション、従量課金、日本円決済対応"
+        },
+        {
+          "feature": "日本語フル対応",
+          "details": "ドキュメント、コメント、UIテキストすべて日英バイリンガル。i18n設定済み"
+        },
+        {
+          "feature": "モダン技術スタック",
+          "details": "Next.js 14 (App Router) + TypeScript + Tailwind CSS + Prisma + PostgreSQL"
+        },
+        {
+          "feature": "本番環境レディ",
+          "details": "Vercel/Railway/Renderへのワンクリックデプロイ設定、環境変数テンプレート、CI/CD設定済み"
+        },
+        {
+          "feature": "管理ダッシュボード",
+          "details": "ユーザー管理、AI使用量トラッキング、収益ダッシュボードのUI付き"
+        }
+      ],
+      "pricing": {
+        "currency": "JPY",
+        "tiers": [
+          {
+            "name": "Starter",
+            "price": 4980,
+            "price_usd": 49,
+            "includes": [
+              "基本テンプレート",
+              "認証機能",
+              "日本語ドキュメント",
+              "6ヶ月アップデート"
+            ]
+          },
+          {
+            "name": "Pro",
+            "price": 12800,
+            "price_usd": 99,
+            "includes": [
+              "全機能",
+              "AI統合コード",
+              "決済システム",
+              "管理ダッシュボード",
+              "1年アップデート",
+              "Discordサポート"
+            ],
+            "recommended": true
+          },
+          {
+            "name": "Team",
+            "price": 29800,
+            "price_usd": 249,
+            "includes": [
+              "Pro全機能",
+              "チーム5名ライセンス",
+              "プライベートGitHubアクセス",
+              "優先サポート",
+              "カスタマイズ相談1回"
+            ]
+          }
+        ]
+      },
+      "format": {
+        "delivery": "GitHubリポジトリアクセス（プライベート招待）",
+        "contents": [
+          "ソースコード一式（Next.js プロジェクト）",
+          "セットアップガイド（日本語PDF + 動画）",
+          "APIキー設定マニュアル",
+          "デプロイチュートリアル",
+          "Figmaデザインファイル（Pro以上）",
+          "Notionテンプレート（開発タスク管理用）"
+        ],
+        "platform": [
+          "Gumroad",
+          "Lemon Squeezy",
+          "自社サイト（Stripe直接）"
+        ]
+      },
+      "differentiation": {
+        "vs_competitors": [
+          "日本語ドキュメント・サポートは競合にほぼ存在しない",
+          "AI機能が最初から統合済み（競合は別売りが多い）",
+          "日本円決済・Stripe Japan対応済み"
+        ],
+        "unique_value": "日本人開発者が英語ドキュメントで苦労する課題を解決しつつ、AI時代のSaaS開発に必要な機能をオールインワンで提供"
+      }
+    }
+  },
+  "content": {
+    "content_outline": {
+      "product_info": {
+        "name": "AI-Ready SaaS Starter Kit Pro",
+        "name_ja": "AI-Ready SaaS スターターキット Pro",
+        "tagline": "AIを搭載したSaaSを、今日から始めよう",
+        "product_type": "テンプレート"
+      },
+      "sales_page_structure": {
+        "hero_section": {
+          "headline": "AI搭載SaaSの開発期間を、数週間から数時間へ",
+          "subheadline": "OpenAI/Claude API統合済み、日本語ドキュメント完備のフルスタックテンプレート",
+          "cta_primary": "今すぐ始める",
+          "cta_secondary": "デモを見る"
+        },
+        "problem_section": {
+          "title": "こんな課題を抱えていませんか？",
+          "pain_points": [
+            "SaaSの初期セットアップに何週間も費やしている",
+            "AI機能の統合方法がわからない、または複雑すぎる",
+            "海外テンプレートの英語ドキュメントで挫折した",
+            "認証・決済システムの実装に時間を取られすぎる",
+            "日本円決済対応で追加の工数がかかる"
+          ]
+        },
+        "solution_section": {
+          "title": "すべて解決済みの状態からスタート",
+          "description": "AI-Ready SaaS Starter Kitは、モダンなSaaS開発に必要な全機能がプリセットされたテンプレートです",
+          "key_benefits": [
+            {
+              "benefit": "開発時間の大幅短縮",
+              "detail": "認証、決済、AI統合が設定済み。すぐにビジネスロジックの実装に集中できる"
+            },
+            {
+              "benefit": "日本語で理解できる",
+              "detail": "ドキュメント、コードコメント、UIテキストすべてが日英バイリンガル対応"
+            },
+            {
+              "benefit": "AI機能をすぐに実装",
+              "detail": "GPT-4、Claude、画像生成AIの統合コードでチャットボットや要約機能がすぐに動く"
+            },
+            {
+              "benefit": "本番環境へワンクリック",
+              "detail": "Vercel/Railway/Renderへのデプロイ設定済み"
+            }
+          ]
+        },
+        "features_section": {
+          "title": "搭載機能",
+          "features": [
+            {
+              "icon": "🤖",
+              "title": "AI機能プリセット",
+              "description": "OpenAI GPT-4、Claude API、画像生成AIの統合コード付き",
+              "highlights": [
+                "チャットボット",
+                "コンテンツ生成",
+                "要約機能"
+              ]
+            },
+            {
+              "icon": "🔐",
+              "title": "認証・決済システム",
+              "description": "NextAuth.js + Stripe/Lemon Squeezy統合",
+              "highlights": [
+                "サブスクリプション",
+                "従量課金",
+                "日本円決済"
+              ]
+            },
+            {
+              "icon": "🌏",
+              "title": "日本語フル対応",
+              "description": "すべてのドキュメントとUIが日英バイリンガル",
+              "highlights": [
+                "i18n設定済み",
+                "日本語コメント",
+                "日本語ガイド"
+              ]
+            },
+            {
+              "icon": "⚡",
+              "title": "モダン技術スタック",
+              "description": "Next.js 14 (App Router) + TypeScript + Tailwind CSS + Prisma + PostgreSQL",
+              "highlights": [
+                "最新のベストプラクティス",
+                "型安全",
+                "高速なDX"
+              ]
+            },
+            {
+              "icon": "🚀",
+              "title": "本番環境レディ",
+              "description": "主要プラットフォームへのワンクリックデプロイ",
+              "highlights": [
+                "Vercel",
+                "Railway",
+                "Render",
+                "CI/CD設定済み"
+              ]
+            },
+            {
+              "icon": "📊",
+              "title": "管理ダッシュボード",
+              "description": "運用に必要な管理機能をすべて搭載",
+              "highlights": [
+                "ユーザー管理",
+                "AI使用量トラッキング",
+                "収益ダッシュボード"
+              ]
+            }
+          ]
+        },
+        "tech_stack_section": {
+          "title": "技術スタック",
+          "categories": [
+            {
+              "category": "フロントエンド",
+              "technologies": [
+                "Next.js 14 (App Router)",
+                "TypeScript",
+                "Tailwind CSS",
+                "shadcn/ui"
+              ]
+            },
+            {
+              "category": "バックエンド",
+              "technologies": [
+                "Next.js API Routes",
+                "Prisma ORM",
+                "PostgreSQL"
+              ]
+            },
+            {
+              "category": "認証",
+              "technologies": [
+                "NextAuth.js",
+                "OAuth (Google, GitHub等)",
+                "メール認証"
+              ]
+            },
+            {
+              "category": "決済",
+              "technologies": [
+                "Stripe",
+                "Lemon Squeezy",
+                "日本円対応"
+              ]
+            },
+            {
+              "category": "AI",
+              "technologies": [
+                "OpenAI API (GPT-4)",
+                "Anthropic API (Claude)",
+                "画像生成AI"
+              ]
+            },
+            {
+              "category": "インフラ",
+              "technologies": [
+                "Vercel",
+                "Railway",
+                "Render",
+                "GitHub Actions"
+              ]
+            }
+          ]
+        },
+        "pricing_section": {
+          "title": "料金プラン",
+          "tiers": [
+            {
+              "name": "Starter",
+              "price": "¥4,980",
+              "price_usd": "$49",
+              "description": "基本機能で始めたい方向け",
+              "includes": [
+                "基本テンプレート",
+                "認証機能",
+                "日本語ドキュメント",
+                "6ヶ月アップデート"
+              ],
+              "recommended": false
+            },
+            {
+              "name": "Pro",
+              "price": "¥12,800",
+              "price_usd": "$99",
+              "description": "AI搭載SaaSを本格開発したい方向け",
+              "includes": [
+                "全機能",
+                "AI統合コード",
+                "決済システム",
+                "管理ダッシュボード",
+                "1年アップデート",
+                "Discordサポート",
+                "Figmaデザインファイル"
+              ],
+              "recommended": true,
+              "badge": "人気No.1"
+            },
+            {
+              "name": "Team",
+              "price": "¥29,800",
+              "price_usd": "$249",
+              "description": "チーム開発・企業利用向け",
+              "includes": [
+                "Pro全機能",
+                "チーム5名ライセンス",
+                "プライベートGitHubアクセス",
+                "優先サポート",
+                "カスタマイズ相談1回"
+              ],
+              "recommended": false
+            }
+          ]
+        },
+        "whats_included_section": {
+          "title": "含まれるもの",
+          "items": [
+            {
+              "item": "ソースコード一式",
+              "description": "Next.jsプロジェクト完全版（GitHubリポジトリアクセス）"
+            },
+            {
+              "item": "セットアップガイド",
+              "description": "日本語PDF + 動画チュートリアル"
+            },
+            {
+              "item": "APIキー設定マニュアル",
+              "description": "OpenAI、Stripe等の設定手順を詳細解説"
+            },
+            {
+              "item": "デプロイチュートリアル",
+              "description": "Vercel/Railway/Renderへの公開手順"
+            },
+            {
+              "item": "Figmaデザインファイル",
+              "description": "カスタマイズ可能なUIデザイン（Pro以上）"
+            },
+            {
+              "item": "Notionテンプレート",
+              "description": "開発タスク管理用テンプレート"
+            }
+          ]
+        },
+        "comparison_section": {
+          "title": "他のテンプレートとの違い",
+          "comparisons": [
+            {
+              "aspect": "日本語ドキュメント",
+              "this_product": "◎ 完全対応",
+              "competitors": "✕ ほぼ存在しない"
+            },
+            {
+              "aspect": "AI機能統合",
+              "this_product": "◎ 最初から含む",
+              "competitors": "△ 別売りが多い"
+            },
+            {
+              "aspect": "日本円決済",
+              "this_product": "◎ Stripe Japan対応済み",
+              "competitors": "△ 追加設定が必要"
+            },
+            {
+              "aspect": "サポート言語",
+              "this_product": "◎ 日本語サポート",
+              "competitors": "✕ 英語のみ"
+            }
+          ]
+        },
+        "use_cases_section": {
+          "title": "こんなSaaSが作れます",
+          "examples": [
+            {
+              "name": "AIライティングツール",
+              "description": "GPT-4を使った記事・コピー生成サービス"
+            },
+            {
+              "name": "カスタマーサポートBot",
+              "description": "Claudeを活用した自動応答システム"
+            },
+            {
+              "name": "画像生成サービス",
+              "description": "DALL-E/Stable Diffusion連携のクリエイティブツール"
+            },
+            {
+              "name": "ドキュメント要約サービス",
+              "description": "長文を自動要約するビジネスツール"
+            },
+            {
+              "name": "学習支援アプリ",
+              "description": "AIチューターによる個別学習プラットフォーム"
+            }
+          ]
+        },
+        "faq_section": {
+          "title": "よくある質問",
+          "faqs": [
+            {
+              "question": "プログラミング初心者でも使えますか？",
+              "answer": "Next.js/React/TypeScriptの基礎知識がある方を対象としています。完全な初心者の方には難しい場合があります。"
+            },
+            {
+              "question": "アップデートはどのように受け取れますか？",
+              "answer": "GitHubリポジトリへのアクセス権が付与されるため、git pullで最新版を取得できます。"
+            },
+            {
+              "question": "商用利用は可能ですか？",
+              "answer": "はい、購入いただいたテンプレートで作成したサービスは商用利用可能です。テンプレート自体の再販は禁止です。"
+            },
+            {
+              "question": "返金保証はありますか？",
+              "answer": "デジタル商品のため原則返金不可ですが、技術的な問題で利用できない場合はサポートまでご連絡ください。"
+            },
+            {
+              "question": "自分でAI APIの契約は必要ですか？",
+              "answer": "はい、OpenAI/Anthropic等のAPIキーはご自身で取得していただく必要があります。設定手順はマニュアルで詳しく解説しています。"
+            },
+            {
+              "question": "Discordサポートではどんな質問ができますか？",
+              "answer": "セットアップに関する質問、バグ報告、機能の使い方などをサポートします。カスタム開発の代行は含まれません。"
+            }
+          ]
+        },
+        "guarantee_section": {
+          "title": "安心のサポート体制",
+          "points": [
+            "日本語でのDiscordサポート（Pro以上）",
+            "定期的なアップデートと機能追加",
+            "セットアップでつまずいたら相談可能"
+          ]
+        },
+        "final_cta_section": {
+          "headline": "AI時代のSaaS開発を、今日から始めよう",
+          "subheadline": "数週間かかる初期セットアップを数時間に短縮",
+          "cta_button": "今すぐ購入する",
+          "urgency_text": null
+        }
+      },
+      "deliverables": {
+        "delivery_method": "GitHubリポジトリアクセス（プライベート招待）",
+        "sales_platforms": [
+          "Gumroad",
+          "Lemon Squeezy",
+          "自社サイト（Stripe直接）"
+        ],
+        "included_files": [
+          {
+            "file": "ソースコード一式",
+            "format": "GitHubリポジトリ",
+            "description": "Next.jsプロジェクト完全版"
+          },
+          {
+            "file": "セットアップガイド",
+            "format": "PDF + 動画",
+            "description": "環境構築から初回起動までの手順"
+          },
+          {
+            "file": "APIキー設定マニュアル",
+            "format": "PDF",
+            "description": "各種API（OpenAI、Stripe等）の設定手順"
+          },
+          {
+            "file": "デプロイチュートリアル",
+            "format": "PDF + 動画",
+            "description": "本番環境への公開手順"
+          },
+          {
+            "file": "Figmaデザインファイル",
+            "format": "Figma",
+            "description": "UIデザインのソースファイル（Pro以上）"
+          },
+          {
+            "file": "Notionテンプレート",
+            "format": "Notionテンプレート",
+            "description": "開発タスク管理用"
+          }
+        ]
+      },
+      "marketing_assets_needed": {
+        "images": [
+          "ヒーローイメージ（製品のスクリーンショット）",
+          "ダッシュボードのスクリーンショット",
+          "AI機能のデモ画面",
+          "管理画面のスクリーンショット",
+          "技術スタックのロゴ一覧",
+          "料金プラン比較表"
+        ],
+        "videos": [
+          "製品デモ動画（2-3分）",
+          "セットアップチュートリアル動画",
+          "デプロイ手順動画"
+        ],
+        "copy": [
+          "販売ページ本文",
+          "メール配信用テキスト",
+          "SNS投稿用テキスト",
+          "広告用コピー"
+        ]
+      }
+    }
+  }
+}

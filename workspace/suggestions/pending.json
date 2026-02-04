@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "id": "sug_ml85qz2p_288c3a67",
+    "title": "改善について",
+    "content": "分析: バグ報告として受け付けました。内容: ダッシュボードでℹ️ ハートビートをOFFにしてるのにWebhookが流れてくる。... みたいなの、分析結果になってない。判断も同様。なので分析と判断をした結果をちゃんと表示するようにして。\n",
+    "category": "improvement",
+    "priority": "high",
+    "status": "pending",
+    "createdAt": "2026-02-04T15:03:45.170Z"
+  },
+  {
+    "id": "sug_ml85rjyw_1eb8a1de",
+    "title": "提案自体について",
+    "content": "提案のタイトルとかカテゴリ、優先度はAIで判定して勝手につけてほしい",
+    "category": "improvement",
+    "priority": "high",
+    "status": "pending",
+    "createdAt": "2026-02-04T15:04:12.248Z"
+  }
+]

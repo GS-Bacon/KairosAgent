@@ -1,0 +1,42 @@
+{
+  "date": "2026-02-04",
+  "logs": [
+    {
+      "timestamp": "2026-02-04T14:54:07.581Z",
+      "skillName": "keyword-research",
+      "input": {
+        "baseKeywords": [
+          "副業"
+        ],
+        "productCategory": "デジタル商品",
+        "language": "日本語",
+        "keywordCount": 3
+      },
+      "success": false,
+      "parseSuccess": false,
+      "fallbackUsed": false,
+      "duration": 180239,
+      "rawOutput": "",
+      "error": "Max retries exceeded",
+      "retryCount": 0
+    },
+    {
+      "timestamp": "2026-02-04T14:59:59.699Z",
+      "skillName": "keyword-research",
+      "input": {
+        "baseKeywords": [
+          "副業"
+        ],
+        "productCategory": "デジタル商品",
+        "language": "日本語",
+        "keywordCount": 3
+      },
+      "success": true,
+      "parseSuccess": true,
+      "fallbackUsed": false,
+      "duration": 22498,
+      "rawOutput": "```json\n{\n  \"mainKeywords\": [\n    \"副業\",\n    \"副業デジタル\"\n  ],\n  \"relatedKeywords\": [\n    \"デジタルコンテンツ販売\"\n  ],\n  \"longTailKeywords\": [\n    \"副業初心者が始めやすいデジタル商品\",\n    \"オフライン販売しないデジタル商品の副業\"\n  ],\n  \"searchIntents\": [\n    {\n      \"keyword\": \"副業\",\n      \"intent\": \"informational\"\n    },\n    {\n      \"keyword\": \"副業デジタル\",\n      \"intent\": \"commercial\"\n    }\n  ]\n}\n```\n",
+      "retryCount": 0
+    }
+  ]
+}

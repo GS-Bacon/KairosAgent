@@ -3,7 +3,7 @@
   "name": "技術系アフィリエイト記事作成",
   "description": "プログラミング・AI関連の技術記事を作成し、アフィリエイトリンク（技術書籍、クラウドサービス、開発ツール等）による収益を目指す。QiitaやZennへの投稿を通じて認知度向上も狙う。",
   "type": "affiliate",
-  "status": "draft",
+  "status": "active",
   "expectedRevenue": 500,
   "expectedCost": 0,
   "riskLevel": 0,
@@ -11,14 +11,25 @@
   "performance": {
     "totalRevenue": 0,
     "totalCost": 0,
-    "executionCount": 0,
+    "executionCount": 2,
     "successCount": 0,
-    "failureCount": 0,
-    "roi": 0
+    "failureCount": 2,
+    "roi": 0,
+    "lastExecutedAt": "2026-02-04T14:46:10.299Z"
   },
   "config": {
-    "platforms": ["qiita", "zenn", "note"],
-    "topics": ["AI", "自動化", "Claude", "プログラミング"],
+    "platforms": [
+      "qiita",
+      "zenn",
+      "note"
+    ],
+    "topics": [
+      "AI",
+      "自動化",
+      "Claude",
+      "プログラミング"
+    ],
     "targetArticlesPerMonth": 4
-  }
+  },
+  "activatedAt": "2026-02-04T13:18:29.581Z"
 }
