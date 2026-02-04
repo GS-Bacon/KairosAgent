@@ -1528,10 +1528,17 @@
 
   <!-- 戦略詳細タブ -->
   <div id="tab-strategy-detail" class="tab-content">
-    <div class="card full-width">
+    <!-- 一覧ビュー -->
+    <div id="strategyListView" class="card full-width">
+      <h2>金稼ぎ戦略一覧</h2>
+      <div id="strategyFullList"></div>
+    </div>
+
+    <!-- 詳細ビュー -->
+    <div id="strategyDetailView" class="card full-width" style="display: none;">
       <div class="strategy-detail-header">
         <h2 id="strategyDetailTitle">戦略詳細</h2>
-        <button class="btn-secondary" onclick="closeStrategyDetail()">一覧に戻る</button>
+        <button class="btn-secondary" onclick="showStrategyList()">一覧に戻る</button>
       </div>
       <div class="strategy-detail-tabs">
         <button class="strategy-detail-tab active" data-tab="overview" onclick="switchStrategySection('overview')">概要</button>
@@ -1608,6 +1615,8 @@
         fetchNotificationSettings();
         fetchNotificationHistory();
         fetchActivity();
+      } else if (tabName === 'strategy-detail') {
+        fetchStrategyFullList();
       }
     }
 
@@ -2536,8 +2545,14 @@
         document.getElementById('tabBtnStrategyDetail').style.display = 'inline-block';
         document.getElementById('strategyDetailTitle').textContent = data.name;
 
-        // 戦略詳細タブに切り替え
-        switchTab('strategy-detail');
+        // 戦略詳細タブに切り替え（まだそのタブにいない場合のみ）
+        const currentTab = document.querySelector('.tab-content.active');
+        if (!currentTab || currentTab.id !== 'tab-strategy-detail') {
+          switchTab('strategy-detail');
+        }
+
+        // 詳細ビューを表示
+        showStrategyDetail();
 
         // セクションを概要にリセット
         switchStrategySection('overview');
@@ -2548,12 +2563,89 @@
       }
     }
 
-    function closeStrategyDetail() {
-      // ダッシュボードに戻る
-      switchTab('dashboard');
-      // タブボタンを非表示にする（オプション）
-      // document.getElementById('tabBtnStrategyDetail').style.display = 'none';
+    function showStrategyList() {
+      // 一覧ビューを表示、詳細ビューを非表示
+      document.getElementById('strategyListView').style.display = 'block';
+      document.getElementById('strategyDetailView').style.display = 'none';
       currentStrategyDetail = null;
+    }
+
+    function showStrategyDetail() {
+      // 詳細ビューを表示、一覧ビューを非表示
+      document.getElementById('strategyListView').style.display = 'none';
+      document.getElementById('strategyDetailView').style.display = 'block';
+    }
+
+    async function fetchStrategyFullList() {
+      try {
+        const res = await fetch(`${API_BASE}/api/strategies`);
+        const strategies = await res.json();
+        updateStrategyFullList(strategies);
+      } catch (error) {
+        console.error('Failed to fetch strategies:', error);
+      }
+    }
+
+    function updateStrategyFullList(strategies) {
+      const container = document.getElementById('strategyFullList');
+
+      if (!strategies || strategies.length === 0) {
+        container.innerHTML = '<div class="strategy-empty">戦略はまだありません</div>';
+        return;
+      }
+
+      // サマリー計算
+      const activeStrategies = strategies.filter(s => s.status === 'active');
+      const totalRevenue = strategies.reduce((sum, s) => sum + (s.metrics?.revenue || 0), 0);
+      const avgRoi = strategies.length > 0
+        ? strategies.reduce((sum, s) => sum + (s.metrics?.roi || 0), 0) / strategies.length
+        : 0;
+
+      let html = '';
+
+      // サマリー部分
+      html += `
+        <div class="strategy-summary">
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value">${activeStrategies.length} / ${strategies.length}</div>
+            <div class="strategy-summary-label">アクティブ戦略</div>
+          </div>
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value ${totalRevenue >= 0 ? 'positive' : 'negative'}">¥${totalRevenue.toLocaleString()}</div>
+            <div class="strategy-summary-label">総収益</div>
+          </div>
+          <div class="strategy-summary-item">
+            <div class="strategy-summary-value ${avgRoi >= 0 ? 'positive' : 'negative'}">${avgRoi.toFixed(1)}%</div>
+            <div class="strategy-summary-label">平均ROI</div>
+          </div>
+        </div>
+      `;
+
+      // 戦略リスト
+      html += '<ul class="strategy-list">';
+      html += strategies.map(strategy => {
+        const perf = strategy.performance || {};
+        const roi = perf.roi || 0;
+        const roiClass = roi >= 0 ? 'positive' : 'negative';
+
+        return `
+          <li class="strategy-item clickable" onclick="openStrategyDetail('${strategy.id}')">
+            <div class="strategy-header">
+              <span class="strategy-name">${escapeHtml(strategy.name)}</span>
+              <span class="strategy-status strategy-status-${strategy.status}">${getStrategyStatusLabel(strategy.status)}</span>
+            </div>
+            <div class="strategy-metrics">
+              <span>収益: ¥${(perf.totalRevenue || 0).toLocaleString()}</span>
+              <span>コスト: ¥${(perf.totalCost || 0).toLocaleString()}</span>
+              <span class="strategy-roi ${roiClass}">ROI: ${roi.toFixed(1)}%</span>
+              <span>実行: ${perf.executionCount || 0}回</span>
+            </div>
+          </li>
+        `;
+      }).join('');
+      html += '</ul>';
+
+      container.innerHTML = html;
     }
 
     function switchStrategySection(sectionName) {
