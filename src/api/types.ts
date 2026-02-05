@@ -46,6 +46,12 @@ export interface ConfigResponse {
   };
   scheduler: {
     interval: number;
+    retryState?: {
+      consecutiveFailures: number;
+      maxRetries: number;
+      lastFailureReason?: string;
+      cooldownUntil?: Date;
+    };
   };
   safety: {
     maxFilesPerChange: number;

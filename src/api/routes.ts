@@ -211,6 +211,7 @@ router.get("/config", (_req: Request, res: Response) => {
     },
     scheduler: {
       interval: schedulerStatus.tasks[0]?.interval || 3600000,
+      retryState: schedulerStatus.retryState,
     },
     safety: {
       maxFilesPerChange: guardConfig.maxFilesPerChange,

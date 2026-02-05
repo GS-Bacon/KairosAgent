@@ -82,11 +82,12 @@ async function main(): Promise<void> {
     config.checkInterval,
     async () => {
       try {
-        await orchestrator.runCycle();
+        return await orchestrator.runCycle();
       } catch (err) {
         logger.error("Cycle failed", {
           error: err instanceof Error ? err.message : String(err),
         });
+        return undefined;
       }
     }
   );
