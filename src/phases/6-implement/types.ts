@@ -12,4 +12,6 @@ export interface ImplementationResult {
   changes: ImplementationChange[];
   snapshotId: string;
   success: boolean;
+  skipped?: boolean;  // 保護ファイルのAIレビュー却下でスキップされた場合
+  skipReason?: string;  // スキップの理由
 }

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "fs";
+import { existsSync, readFileSync, mkdirSync, unlinkSync } from "fs";
 import { dirname, join } from "path";
 import { RepairPlan } from "../types.js";
 import { ImplementationChange, ImplementationResult } from "./types.js";
@@ -7,6 +7,8 @@ import { snapshotManager } from "../../safety/snapshot.js";
 import { guard } from "../../safety/guard.js";
 import { logger } from "../../core/logger.js";
 import { eventBus } from "../../core/event-bus.js";
+import { troubleCollector } from "../../trouble/index.js";
+import { CodeSanitizer } from "../../ai/code-sanitizer.js";
 
 export class CodeImplementer {
   private srcDir: string;
@@ -24,13 +26,73 @@ export class CodeImplementer {
     });
 
     if (!validation.allowed) {
-      logger.error("Change blocked by guard", { reason: validation.reason });
-      return {
-        planId: plan.id,
-        changes: [],
-        snapshotId: "",
-        success: false,
-      };
+      // 完全保護ファイルの場合は即座にブロック
+      const strictlyProtectedFiles = plan.affectedFiles.filter(
+        (f) => guard.isStrictlyProtected(f)
+      );
+
+      if (strictlyProtectedFiles.length > 0) {
+        logger.error("Strictly protected file - change blocked", {
+          reason: validation.reason,
+          files: strictlyProtectedFiles,
+        });
+        return {
+          planId: plan.id,
+          changes: [],
+          snapshotId: "",
+          success: false,
+        };
+      }
+
+      // 条件付き保護ファイルの場合はAIレビューを試みる
+      const conditionallyProtectedFiles = plan.affectedFiles.filter(
+        (f) => guard.isConditionallyProtected(f)
+      );
+
+      if (conditionallyProtectedFiles.length > 0) {
+        logger.info("Conditionally protected files detected, requesting AI review", {
+          files: conditionallyProtectedFiles,
+        });
+
+        // AI Providerを初期化（まだの場合）
+        guard.initializeAIProviders();
+
+        const reviewResult = await guard.reviewProtectedFileChange(
+          conditionallyProtectedFiles[0],
+          plan.description || `Plan ${plan.id}: ${plan.targetIssue?.message || plan.targetImprovement?.description || "Unknown"}`
+        );
+
+        if (reviewResult.approved) {
+          logger.info("Protected file change approved by AI review", {
+            files: conditionallyProtectedFiles,
+            reason: reviewResult.reason,
+          });
+          // 続行を許可（validationを上書き）
+        } else {
+          logger.warn("Protected file change rejected by AI review - skipping plan", {
+            files: conditionallyProtectedFiles,
+            reason: reviewResult.reason,
+          });
+          // success: trueでスキップ（サイクル失敗にしない）
+          return {
+            planId: plan.id,
+            changes: [],
+            snapshotId: "",
+            success: true,  // サイクルは成功扱い
+            skipped: true,  // スキップされたことを示す
+            skipReason: `Protected file change rejected: ${reviewResult.reason}`,
+          };
+        }
+      } else {
+        // 保護ファイル以外の理由でブロックされた場合
+        logger.error("Change blocked by guard", { reason: validation.reason });
+        return {
+          planId: plan.id,
+          changes: [],
+          snapshotId: "",
+          success: false,
+        };
+      }
     }
 
     // Create snapshot before making changes
@@ -39,7 +101,37 @@ export class CodeImplementer {
 
     try {
       for (const step of plan.steps) {
-        const fullPath = join(this.srcDir, step.file);
+        // Prevent double src/ prefix: if step.file already starts with src/, use it as-is
+        let fullPath = step.file.startsWith("src/") || step.file.startsWith("./src/")
+          ? step.file.replace(/^\.\//, "")  // Remove leading ./ if present
+          : join(this.srcDir, step.file);
+
+        // パス検証と自動修正
+        const pathValidation = guard.validatePath(fullPath);
+        if (!pathValidation.valid) {
+          logger.error("Invalid path blocked", {
+            path: fullPath,
+            error: pathValidation.error,
+            errorType: pathValidation.errorType,
+          });
+          changes.push({
+            file: fullPath,
+            changeType: step.action === "create" ? "create" : step.action === "delete" ? "delete" : "modify",
+            success: false,
+            error: `Path validation failed: ${pathValidation.error}`,
+          });
+          continue;
+        }
+
+        // 修正が適用された場合は修正後のパスを使用
+        if (pathValidation.correctedPath) {
+          logger.info("Path auto-corrected", {
+            original: fullPath,
+            corrected: pathValidation.correctedPath,
+          });
+          fullPath = pathValidation.correctedPath;
+        }
+
         let change: ImplementationChange;
 
         switch (step.action) {
@@ -80,6 +172,19 @@ export class CodeImplementer {
       logger.error("Implementation failed", {
         error: err instanceof Error ? err.message : String(err),
       });
+
+      // 実装エラーをトラブルとして記録
+      if (err instanceof Error) {
+        await troubleCollector.captureFromError(err, "implement", "runtime-error", "high");
+      } else {
+        await troubleCollector.capture({
+          phase: "implement",
+          category: "runtime-error",
+          severity: "high",
+          message: String(err),
+        });
+      }
+
       return {
         planId: plan.id,
         changes,
@@ -92,10 +197,24 @@ export class CodeImplementer {
   private async createFile(filePath: string, details: string): Promise<ImplementationChange> {
     try {
       const ai = getAIProvider();
-      const newContent = await ai.generateCode(
+      const rawContent = await ai.generateCode(
         `Create a new file with: ${details}`,
         { file: filePath }
       );
+
+      // ANSIエスケープ除去とコードブロック抽出
+      const newContent = CodeSanitizer.extractCodeBlock(rawContent, "typescript");
+
+      // 制御文字チェック
+      if (CodeSanitizer.containsControlChars(newContent)) {
+        logger.error("AI generated content contains control characters", { file: filePath });
+        return {
+          file: filePath,
+          changeType: "create",
+          success: false,
+          error: "Generated content contains control characters",
+        };
+      }
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
@@ -136,7 +255,8 @@ export class CodeImplementer {
         mkdirSync(dir, { recursive: true });
       }
 
-      writeFileSync(filePath, newContent);
+      // 安全なファイル書き込み
+      CodeSanitizer.safeWriteFile(filePath, newContent, { validateTs: filePath.endsWith(".ts") });
 
       return {
         file: filePath,
@@ -168,10 +288,25 @@ export class CodeImplementer {
       const ai = getAIProvider();
 
       const issue = plan.targetIssue?.message || plan.targetImprovement?.description;
-      const newContent = await ai.generateCode(
+      const rawContent = await ai.generateCode(
         `${details}\nFix this issue: ${issue}`,
         { file: filePath, existingCode: originalContent, issue }
       );
+
+      // ANSIエスケープ除去とコードブロック抽出
+      const newContent = CodeSanitizer.extractCodeBlock(rawContent, "typescript");
+
+      // 制御文字チェック
+      if (CodeSanitizer.containsControlChars(newContent)) {
+        logger.error("AI generated content contains control characters", { file: filePath });
+        return {
+          file: filePath,
+          changeType: "modify",
+          originalContent,
+          success: false,
+          error: "Generated content contains control characters",
+        };
+      }
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
@@ -208,7 +343,8 @@ export class CodeImplementer {
         });
       }
 
-      writeFileSync(filePath, newContent);
+      // 安全なファイル書き込み
+      CodeSanitizer.safeWriteFile(filePath, newContent, { validateTs: filePath.endsWith(".ts") });
 
       return {
         file: filePath,

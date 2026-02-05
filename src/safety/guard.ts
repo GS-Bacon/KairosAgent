@@ -7,7 +7,9 @@ import * as path from "path";
 export interface GuardConfig {
   maxFilesPerChange: number;
   maxLinesPerFile: number;
-  protectedPatterns: string[];
+  protectedPatterns: string[];  // 後方互換性（全保護パターン）
+  strictlyProtectedPatterns: string[];  // 完全保護（変更不可）
+  conditionallyProtectedPatterns: string[];  // 条件付き保護（AIレビュー必須）
   allowedExtensions: string[];
   aiReviewEnabled: boolean;
   aiReviewLogPath: string;
@@ -37,9 +39,31 @@ export interface PathValidationResult {
 const DEFAULT_CONFIG: GuardConfig = {
   maxFilesPerChange: 5,
   maxLinesPerFile: 500,
+  // 完全保護: 絶対に変更不可
+  strictlyProtectedPatterns: [
+    "src/safety/",
+  ],
+  // 条件付き保護: AIレビューで承認されれば変更可
+  conditionallyProtectedPatterns: [
+    "src/core/logger.ts",
+    "src/ai/claude-provider.ts",
+    "src/ai/hybrid-provider.ts",
+    "src/ai/factory.ts",
+    "src/ai/code-sanitizer.ts",
+    "src/ai/shell-escape.ts",
+    "package.json",
+    "tsconfig.json",
+    ".env",
+  ],
+  // 後方互換性のため protectedPatterns も維持（両方の合計）
   protectedPatterns: [
     "src/safety/",
     "src/core/logger.ts",
+    "src/ai/claude-provider.ts",
+    "src/ai/hybrid-provider.ts",
+    "src/ai/factory.ts",
+    "src/ai/code-sanitizer.ts",
+    "src/ai/shell-escape.ts",
     "package.json",
     "tsconfig.json",
     ".env",
@@ -97,6 +121,116 @@ export class Guard {
       }
     }
     return false;
+  }
+
+  /**
+   * 完全保護ファイルかどうか（絶対に変更不可）
+   */
+  isStrictlyProtected(filePath: string): boolean {
+    for (const pattern of this.config.strictlyProtectedPatterns) {
+      if (filePath.includes(pattern)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 条件付き保護ファイルかどうか（AIレビュー必須）
+   */
+  isConditionallyProtected(filePath: string): boolean {
+    for (const pattern of this.config.conditionallyProtectedPatterns) {
+      if (filePath.includes(pattern)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 保護ファイル変更のAIレビュー
+   * 条件付き保護ファイルへの変更が正当かどうかをAIに判断させる
+   */
+  async reviewProtectedFileChange(
+    filePath: string,
+    changeDescription: string,
+    proposedCode?: string
+  ): Promise<{ approved: boolean; reason: string }> {
+    if (!this.config.aiReviewEnabled) {
+      return { approved: false, reason: "AI review disabled" };
+    }
+
+    const prompt = `あなたはセキュリティレビュアーです。以下の保護ファイルへの変更が正当かどうか判断してください。
+
+## 対象ファイル
+${filePath}
+
+## なぜこのファイルは保護されているか
+- AIプロバイダーやコアインフラなど、システムの重要な部分
+- 不適切な変更はシステム全体の安定性やセキュリティに影響する
+
+## 変更の説明
+${changeDescription}
+
+${proposedCode ? `## 提案されたコード（一部）
+\`\`\`
+${proposedCode.slice(0, 1500)}
+\`\`\`` : ""}
+
+## 判断基準
+1. 変更がシステムの安定性を損なわないか
+2. セキュリティ機構を弱体化させないか
+3. 変更の目的が正当な改善であるか（バグ修正、パフォーマンス改善など）
+4. 変更が必要最小限であるか
+
+## 回答形式（JSON）
+{"approved": true/false, "reason": "判断理由"}
+
+JSONのみを出力してください。`;
+
+    let claudeVerdict: { approved: boolean; reason: string } | null = null;
+
+    // Claude判断（保護ファイルの変更はClaudeの承認必須）
+    if (this.claudeProvider) {
+      try {
+        const claudeResponse = await this.claudeProvider.chat(prompt);
+        const match = claudeResponse.match(/\{[\s\S]*\}/);
+        if (match) {
+          claudeVerdict = JSON.parse(match[0]);
+          logger.info("Claude protected file review", {
+            file: filePath,
+            verdict: claudeVerdict,
+          });
+        }
+      } catch (err) {
+        logger.warn("Claude protected file review failed", { error: err });
+      }
+    }
+
+    if (!claudeVerdict) {
+      return {
+        approved: false,
+        reason: "Claude review required but unavailable",
+      };
+    }
+
+    // ログに記録
+    const result: AIReviewResult = {
+      timestamp: new Date().toISOString(),
+      code: proposedCode || changeDescription,
+      codeLength: proposedCode?.length || changeDescription.length,
+      warnings: [`Protected file change: ${filePath}`],
+      context: `Protected file review: ${changeDescription}`,
+      dangerousPatterns: [],
+      claudeVerdict,
+      openCodeVerdict: null,
+      finalDecision: claudeVerdict.approved ? "approved" : "rejected",
+      decisionReason: `Protected file review: ${claudeVerdict.reason}`,
+    };
+    this.reviewLog.push(result);
+    this.saveReviewLog();
+
+    return claudeVerdict;
   }
 
   isExtensionAllowed(filePath: string): boolean {
