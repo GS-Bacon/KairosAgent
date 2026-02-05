@@ -141,19 +141,49 @@ export class GoalManager {
   }
 
   initializeDefaultGoals(): void {
+    // トークン最適化目標
     const existingTokenGoal = this.data.goals.find(
-      (g) => g.title === "ClaudeCodeトークン使用量削減"
+      (g) => g.title === "品質維持しながらトークン使用量を最適化"
     );
 
     if (!existingTokenGoal) {
       this.createGoal({
         type: "permanent",
-        title: "ClaudeCodeトークン使用量削減",
-        description:
-          "GLM4を下働きとして活用し、Claudeの使用を重要な判断に限定",
-        metrics: [{ name: "tokensSaved", target: 1000, current: 0 }],
+        title: "品質維持しながらトークン使用量を最適化",
+        description: `AI呼び出し時のコンテキストを最適化し、品質を維持・向上しながらトークン消費を削減する。
+
+【制約条件】
+- ビルド成功率100%を維持
+- テスト成功率を低下させない
+- AI修正の品質（正確性）を維持
+
+【最適化手法】
+- existingCodeの全文送信を避け、エラー周辺行のみ抽出
+- import/export文は常に保持（依存関係情報を失わない）
+- 100行未満の小ファイルは最適化しない（品質優先）
+
+【検出対象パターン】
+- buildPrompt, createPrompt等でexistingCodeを全文送信している箇所
+- 大きなコンテキスト構築（500行以上）
+- 重複情報の送信`,
+        metrics: [
+          { name: "avgTokensPerCycle", target: 5000, current: 10000, unit: "tokens" },
+          { name: "buildSuccessRate", target: 100, current: 100, unit: "%" },
+          { name: "testSuccessRate", target: 95, current: 95, unit: "%" },
+          { name: "optimizationCoverage", target: 80, current: 0, unit: "%" },
+        ],
       });
-      logger.info("Default permanent goal initialized");
+      logger.info("Token optimization goal initialized");
+    }
+
+    // 古い形式の目標があれば非アクティブ化
+    const oldTokenGoal = this.data.goals.find(
+      (g) => g.title === "ClaudeCodeトークン使用量削減"
+    );
+    if (oldTokenGoal && oldTokenGoal.active) {
+      oldTokenGoal.active = false;
+      this.save();
+      logger.info("Deactivated old token goal in favor of new one");
     }
   }
 }

@@ -4,6 +4,7 @@ import { orchestrator } from "./core/orchestrator.js";
 import { APIServer } from "./api/server.js";
 import { initializeAI, AIConfig } from "./ai/factory.js";
 import { guard } from "./safety/guard.js";
+import { goalManager } from "./goals/manager.js";
 import { existsSync, readFileSync, mkdirSync } from "fs";
 
 interface GitConfig {
@@ -126,6 +127,10 @@ async function main(): Promise<void> {
   logger.info("KairosAgent starting...");
 
   ensureDirectories();
+
+  // Initialize default goals
+  goalManager.initializeDefaultGoals();
+  logger.info("Default goals initialized");
 
   const config = loadConfig();
   logger.info("Configuration loaded", { port: config.port, checkInterval: config.checkInterval });

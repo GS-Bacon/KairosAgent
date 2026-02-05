@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { Phase, PhaseResult, CycleContext, Improvement } from "../types.js";
 import { ImprovementFinder } from "./finder.js";
+import { GoalBasedAnalyzer } from "./goal-analyzer.js";
 import { logger } from "../../core/logger.js";
 import { toolTracker } from "../../tools/index.js";
 import {
@@ -15,9 +16,11 @@ import { improvementQueue, QueuedImprovement } from "../../improvement-queue/ind
 export class ImproveFindPhase implements Phase {
   name = "improve-find";
   private finder: ImprovementFinder;
+  private goalAnalyzer: GoalBasedAnalyzer;
 
   constructor() {
     this.finder = new ImprovementFinder();
+    this.goalAnalyzer = new GoalBasedAnalyzer();
   }
 
   async execute(context: CycleContext): Promise<PhaseResult> {
@@ -154,6 +157,31 @@ export class ImproveFindPhase implements Phase {
       logger.debug("Failed to get queued improvements", { error });
     }
 
+    // 5. 目標ベースの改善検出
+    let goalImprovementsCount = 0;
+    if (context.activeGoals && context.activeGoals.length > 0) {
+      try {
+        const goalImprovements = this.goalAnalyzer.analyzeForGoals(
+          context.activeGoals,
+          sourceFiles
+        );
+
+        for (const goalImp of goalImprovements) {
+          context.improvements.push(goalImp.improvement);
+          goalImprovementsCount++;
+        }
+
+        if (goalImprovementsCount > 0) {
+          logger.info("Goal-based improvements found", {
+            count: goalImprovementsCount,
+            goals: context.activeGoals.map((g) => g.title),
+          });
+        }
+      } catch (error) {
+        logger.debug("Goal-based analysis failed", { error });
+      }
+    }
+
     const totalIssues = context.issues.length;
     const totalImprovements = context.improvements.length;
 
@@ -170,6 +198,7 @@ export class ImproveFindPhase implements Phase {
       markers: result.markers.length,
       qualityIssues: result.qualityIssues.length,
       patternMatches: context.patternMatches,
+      goalImprovements: goalImprovementsCount,
       aiCalls: context.aiCalls,
       totalImprovements,
     });
@@ -177,7 +206,7 @@ export class ImproveFindPhase implements Phase {
     return {
       success: true,
       shouldStop: false,
-      message: `Found ${totalIssues} issues, ${totalImprovements} improvements (${context.patternMatches} from patterns)`,
+      message: `Found ${totalIssues} issues, ${totalImprovements} improvements (${context.patternMatches} patterns, ${goalImprovementsCount} from goals)`,
       data: result,
     };
   }
