@@ -1,10 +1,21 @@
 import { logger } from "./logger.js";
+import { CycleResult } from "../phases/types.js";
+
+/**
+ * 即時再実行の状態管理
+ */
+export interface RetryState {
+  consecutiveFailures: number;   // 連続失敗回数
+  maxRetries: number;            // 上限（デフォルト: 3）
+  lastFailureReason?: string;    // 前回の失敗理由
+  cooldownUntil?: Date;          // クールダウン終了時刻
+}
 
 export interface ScheduledTask {
   id: string;
   name: string;
   interval: number;
-  handler: () => Promise<void>;
+  handler: () => Promise<CycleResult | void>;
   lastRun?: Date;
   nextRun?: Date;
   isRunning: boolean;
@@ -14,12 +25,17 @@ export class Scheduler {
   private tasks: Map<string, ScheduledTask> = new Map();
   private timers: Map<string, NodeJS.Timeout> = new Map();
   private isRunning: boolean = false;
+  private retryState: RetryState = {
+    consecutiveFailures: 0,
+    maxRetries: 3,
+  };
+  private retryTimer: NodeJS.Timeout | null = null;
 
   register(
     id: string,
     name: string,
     interval: number,
-    handler: () => Promise<void>
+    handler: () => Promise<CycleResult | void>
   ): void {
     if (this.tasks.has(id)) {
       logger.warn(`Task ${id} already registered, replacing`);
@@ -56,9 +72,11 @@ export class Scheduler {
     task.isRunning = true;
     task.lastRun = new Date();
 
+    let result: CycleResult | void = undefined;
+
     try {
       logger.debug(`Running task: ${task.name}`);
-      await task.handler();
+      result = await task.handler();
       logger.debug(`Task completed: ${task.name}`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -67,6 +85,107 @@ export class Scheduler {
       task.isRunning = false;
       task.nextRun = new Date(Date.now() + task.interval);
     }
+
+    // CycleResult が返された場合、即時再実行を判定
+    if (result && this.isCycleResult(result)) {
+      await this.handleCycleResult(task, result);
+    }
+  }
+
+  /**
+   * CycleResult かどうかを判定
+   */
+  private isCycleResult(result: unknown): result is CycleResult {
+    return (
+      typeof result === "object" &&
+      result !== null &&
+      "cycleId" in result &&
+      "shouldRetry" in result
+    );
+  }
+
+  /**
+   * サイクル結果に基づいて即時再実行を処理
+   */
+  private async handleCycleResult(task: ScheduledTask, result: CycleResult): Promise<void> {
+    if (result.success) {
+      // 成功時はリトライ状態をリセット
+      this.retryState.consecutiveFailures = 0;
+      this.retryState.lastFailureReason = undefined;
+      logger.debug("Cycle succeeded, retry state reset");
+      return;
+    }
+
+    // 失敗した場合
+    if (!result.shouldRetry) {
+      logger.debug("Cycle failed but retry not requested");
+      return;
+    }
+
+    // 同じ理由で連続失敗している場合は即座にクールダウン
+    if (this.retryState.lastFailureReason === result.retryReason) {
+      logger.warn("Same failure reason repeated, entering cooldown immediately", {
+        reason: result.retryReason,
+      });
+      this.enterCooldown();
+      return;
+    }
+
+    // リトライ可能かチェック
+    if (!this.canRetry()) {
+      logger.info("Cannot retry, in cooldown or max retries reached");
+      return;
+    }
+
+    // 即時再実行をスケジュール
+    this.retryState.consecutiveFailures++;
+    this.retryState.lastFailureReason = result.retryReason;
+
+    logger.info("Scheduling immediate retry", {
+      reason: result.retryReason,
+      consecutiveFailures: this.retryState.consecutiveFailures,
+      maxRetries: this.retryState.maxRetries,
+    });
+
+    // 5秒後に再実行（連続実行を避けるため少し待つ）
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.runTask(task);
+    }, 5000);
+  }
+
+  /**
+   * リトライ可能かどうかを判定
+   */
+  private canRetry(): boolean {
+    // クールダウン中かチェック
+    if (this.retryState.cooldownUntil && new Date() < this.retryState.cooldownUntil) {
+      logger.debug("In cooldown period", {
+        cooldownUntil: this.retryState.cooldownUntil,
+      });
+      return false;
+    }
+
+    // 最大リトライ回数に達したかチェック
+    if (this.retryState.consecutiveFailures >= this.retryState.maxRetries) {
+      this.enterCooldown();
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * クールダウン期間に入る
+   */
+  private enterCooldown(): void {
+    const cooldownMs = 30 * 60 * 1000; // 30分
+    this.retryState.cooldownUntil = new Date(Date.now() + cooldownMs);
+    this.retryState.consecutiveFailures = 0; // リセット
+    logger.warn("Max retries reached, entering cooldown", {
+      cooldownUntil: this.retryState.cooldownUntil,
+      cooldownMinutes: cooldownMs / 60000,
+    });
   }
 
   start(): void {
@@ -98,6 +217,13 @@ export class Scheduler {
       clearInterval(timer);
     }
     this.timers.clear();
+
+    // リトライタイマーもクリア
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+
     this.isRunning = false;
   }
 
@@ -109,11 +235,31 @@ export class Scheduler {
     await this.runTask(task);
   }
 
-  getStatus(): { tasks: ScheduledTask[]; isRunning: boolean } {
+  getStatus(): {
+    tasks: ScheduledTask[];
+    isRunning: boolean;
+    retryState: RetryState;
+  } {
     return {
       tasks: Array.from(this.tasks.values()),
       isRunning: this.isRunning,
+      retryState: { ...this.retryState },
     };
+  }
+
+  /**
+   * リトライ状態をリセット（テスト用）
+   */
+  resetRetryState(): void {
+    this.retryState = {
+      consecutiveFailures: 0,
+      maxRetries: 3,
+    };
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    logger.debug("Retry state reset");
   }
 }
 

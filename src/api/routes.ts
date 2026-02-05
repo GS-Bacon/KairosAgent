@@ -185,11 +185,11 @@ router.post("/trigger/check", async (_req: Request, res: Response) => {
 
 router.post("/trigger/repair", async (_req: Request, res: Response) => {
   try {
-    const context = await orchestrator.runCycle();
+    const result = await orchestrator.runCycle();
     const response: TriggerResponse = {
-      success: true,
-      message: `Repair cycle completed. Issues: ${context.issues.length}, Improvements: ${context.improvements.length}`,
-      cycleId: context.cycleId,
+      success: result.success,
+      message: `Repair cycle completed. Success: ${result.success}, Troubles: ${result.troubleCount}${result.shouldRetry ? " (retry scheduled)" : ""}`,
+      cycleId: result.cycleId,
     };
     res.json(response);
   } catch (err) {

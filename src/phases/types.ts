@@ -1,4 +1,5 @@
 import { Goal, GoalProgress } from "../goals/types.js";
+import { Trouble } from "../trouble/types.js";
 
 export interface Issue {
   id: string;
@@ -77,6 +78,9 @@ export interface CycleContext {
   usedPatterns?: string[];  // パターンIDのリスト
   patternMatches?: number;  // パターンマッチの数
   aiCalls?: number;         // AI呼び出しの数
+
+  // Trouble tracking
+  troubles?: Trouble[];     // サイクル中に発生したトラブル
 }
 
 export interface Phase {
@@ -91,4 +95,18 @@ export function createCycleContext(): CycleContext {
     issues: [],
     improvements: [],
   };
+}
+
+/**
+ * サイクル実行結果
+ * Orchestratorが返す、スケジューラーが即時再実行判断に使用
+ */
+export interface CycleResult {
+  cycleId: string;
+  success: boolean;
+  duration: number;
+  troubleCount: number;
+  shouldRetry: boolean;      // 即時再実行が必要か
+  retryReason?: string;      // 再実行理由
+  failedPhase?: string;      // 失敗したフェーズ名
 }

@@ -1,6 +1,6 @@
 import { logger } from "./logger.js";
 import { eventBus } from "./event-bus.js";
-import { Phase, CycleContext, createCycleContext } from "../phases/types.js";
+import { Phase, CycleContext, CycleResult, createCycleContext } from "../phases/types.js";
 import { goalManager } from "../goals/index.js";
 import { getAIProvider } from "../ai/factory.js";
 import { HybridProvider, PhaseName } from "../ai/hybrid-provider.js";
@@ -20,11 +20,19 @@ import {
   initializeLearningSystem,
   ExtractionContext,
 } from "../learning/index.js";
+import { troubleCollector } from "../trouble/index.js";
+import { abstractionEngine } from "../abstraction/index.js";
+import {
+  improvementQueue,
+  collectFromAbstraction,
+} from "../improvement-queue/index.js";
 
 export class Orchestrator {
   private phases: Phase[];
   private isRunning: boolean = false;
   private currentContext: CycleContext | null = null;
+  private lastFailedPhase: string | null = null;
+  private hasCriticalFailure: boolean = false;
 
   constructor() {
     this.phases = [
@@ -39,13 +47,15 @@ export class Orchestrator {
     ];
   }
 
-  async runCycle(): Promise<CycleContext> {
+  async runCycle(): Promise<CycleResult> {
     if (this.isRunning) {
       logger.warn("Cycle already running, skipping");
       throw new Error("Cycle already in progress");
     }
 
     this.isRunning = true;
+    this.lastFailedPhase = null;
+    this.hasCriticalFailure = false;
     const context = createCycleContext();
     this.currentContext = context;
 
@@ -64,6 +74,10 @@ export class Orchestrator {
     context.usedPatterns = [];
     context.patternMatches = 0;
     context.aiCalls = 0;
+
+    // Initialize trouble collector
+    troubleCollector.setCycleId(context.cycleId);
+    context.troubles = [];
 
     logger.info("Starting improvement cycle", {
       cycleId: context.cycleId,
@@ -102,6 +116,11 @@ export class Orchestrator {
 
         if (!result.success) {
           logger.warn(`Phase ${phase.name} failed`, { message: result.message });
+          this.lastFailedPhase = phase.name;
+          // Phase 6 (implement) や Phase 8 (verify) の失敗は重大
+          if (phase.name === "implement" || phase.name === "verify") {
+            this.hasCriticalFailure = true;
+          }
         }
 
         if (result.shouldStop) {
@@ -113,6 +132,9 @@ export class Orchestrator {
       // Feedback Loop: パターン学習と信頼度更新
       await this.executeFeedbackLoop(context);
 
+      // Trouble Abstraction: トラブルパターンの抽出と改善キュー追加
+      await this.executeAbstraction(context);
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error("Cycle failed with error", { error: errorMessage });
@@ -121,6 +143,11 @@ export class Orchestrator {
         error: errorMessage,
         context: { cycleId: context.cycleId },
       });
+
+      // サイクルエラーをトラブルとして記録
+      if (err instanceof Error) {
+        await troubleCollector.captureFromError(err, "orchestrator", "runtime-error", "critical");
+      }
 
       // 失敗時も使用パターンの信頼度を更新
       await this.updatePatternConfidence(context, false);
@@ -152,6 +179,15 @@ export class Orchestrator {
         logger.warn("Failed to save learning statistics", { error });
       }
 
+      // Flush troubles to repository
+      try {
+        const flushedTroubles = await troubleCollector.flush();
+        context.troubles = flushedTroubles;
+        logger.debug("Flushed troubles", { count: flushedTroubles.length });
+      } catch (error) {
+        logger.warn("Failed to flush troubles", { error });
+      }
+
       await eventBus.emit({
         type: "cycle_completed",
         timestamp: new Date(),
@@ -163,10 +199,59 @@ export class Orchestrator {
         patternMatches: context.patternMatches,
         aiCalls: context.aiCalls,
         usedPatterns: context.usedPatterns?.length || 0,
+        troubles: context.troubles?.length || 0,
       });
     }
 
-    return context;
+    // CycleResult を構築して返す
+    const troubleCount = context.troubles?.length || 0;
+    const shouldRetry = this.shouldRetryImmediately(context);
+    const retryReason = this.getRetryReason(context);
+
+    return {
+      cycleId: context.cycleId,
+      success: !this.hasCriticalFailure,
+      duration: Date.now() - context.startTime.getTime(),
+      troubleCount,
+      shouldRetry,
+      retryReason,
+      failedPhase: this.lastFailedPhase || undefined,
+    };
+  }
+
+  /**
+   * 即時再実行が必要かどうかを判定
+   */
+  private shouldRetryImmediately(context: CycleContext): boolean {
+    // ビルド/テスト失敗
+    if (context.testResults?.passed === false) {
+      return true;
+    }
+    // 新しいトラブルが発生した
+    if (context.troubles && context.troubles.length > 0) {
+      return true;
+    }
+    // 重大なフェーズ失敗
+    if (this.hasCriticalFailure) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 再実行理由を取得
+   */
+  private getRetryReason(context: CycleContext): string | undefined {
+    if (context.testResults?.passed === false) {
+      return `Test/Build failed in ${this.lastFailedPhase || "verify"} phase`;
+    }
+    if (context.troubles && context.troubles.length > 0) {
+      return `${context.troubles.length} trouble(s) recorded during cycle`;
+    }
+    if (this.hasCriticalFailure) {
+      return `Critical failure in ${this.lastFailedPhase} phase`;
+    }
+    return undefined;
   }
 
   /**
@@ -253,6 +338,43 @@ export class Orchestrator {
       }
     } catch (error) {
       logger.warn("Failed to extract patterns", { error });
+    }
+  }
+
+  /**
+   * トラブル抽象化と改善キュー追加
+   */
+  private async executeAbstraction(context: CycleContext): Promise<void> {
+    const troubles = context.troubles || [];
+
+    if (troubles.length === 0) {
+      logger.debug("No troubles to abstract");
+      return;
+    }
+
+    try {
+      // トラブルパターンを分析
+      const result = await abstractionEngine.analyze({
+        troubles,
+        existingPatterns: await abstractionEngine.getPatterns(),
+        cycleId: context.cycleId,
+      });
+
+      logger.info("Abstraction completed", {
+        newPatterns: result.newPatterns.length,
+        updatedPatterns: result.updatedPatterns.length,
+        preventionSuggestions: result.preventionSuggestions.length,
+      });
+
+      // 予防策を改善キューに追加
+      if (result.preventionSuggestions.length > 0) {
+        const collected = await collectFromAbstraction();
+        logger.info("Collected improvements from abstraction", {
+          count: collected,
+        });
+      }
+    } catch (error) {
+      logger.warn("Failed to execute abstraction", { error });
     }
   }
 
