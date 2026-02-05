@@ -14,7 +14,11 @@ import {
   HealthResponse,
   TriggerResponse,
   ConfigResponse,
+  CriticalAlertInfo,
+  ProviderHealthInfo,
 } from "./types.js";
+import { getHealthMonitor } from "../ai/provider-health.js";
+import { criticalAlertManager } from "../notifications/critical-alert.js";
 
 const router = Router();
 const startTime = Date.now();
@@ -67,14 +71,38 @@ router.get("/status", (_req: Request, res: Response) => {
     (h) => new Date(h.timestamp).getTime() > sevenDaysAgo
   );
 
+  const healthMonitor = getHealthMonitor();
+  const activeAlerts = criticalAlertManager.getActiveAlerts();
+
+  const criticalAlerts: CriticalAlertInfo[] = activeAlerts.map((alert) => ({
+    type: alert.alertType,
+    message: alert.message,
+    timestamp: alert.timestamp.toISOString(),
+    affectedProviders: alert.affectedProviders,
+  }));
+
+  const providerHealth: ProviderHealthInfo[] = healthMonitor
+    ? healthMonitor.getAllHealth().map((h) => ({
+        name: h.name,
+        status: h.status,
+        consecutiveFailures: h.consecutiveFailures,
+        lastSuccess: h.lastSuccess?.toISOString(),
+        lastFailure: h.lastFailure?.toISOString(),
+      }))
+    : [];
+
+  const hasCriticalAlerts = criticalAlerts.length > 0;
+
   const response: StatusResponse = {
-    state: status.isRunning ? "running" : "idle",
+    state: hasCriticalAlerts ? "critical" : status.isRunning ? "running" : "idle",
     uptime_seconds: Math.floor((now - startTime) / 1000),
     stats: {
       modifications_7d: recentHistory.filter((h) => h.type === "modification").length,
       rollbacks_7d: recentHistory.filter((h) => h.type === "rollback").length,
       errors_7d: recentHistory.filter((h) => h.type === "error").length,
     },
+    criticalAlerts: criticalAlerts.length > 0 ? criticalAlerts : undefined,
+    providerHealth: providerHealth.length > 0 ? providerHealth : undefined,
   };
 
   res.json(response);

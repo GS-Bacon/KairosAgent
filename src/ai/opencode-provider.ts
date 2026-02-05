@@ -13,8 +13,13 @@ export class OpenCodeProvider implements AIProvider {
 
   private runOpenCode(prompt: string): string {
     try {
-      const escapedPrompt = prompt.replace(/'/g, "'\"'\"'");
-      const result = execSync(`echo '${escapedPrompt}' | opencode -p`, {
+      // ダブルクォートとバックスラッシュをエスケープ
+      const escapedPrompt = prompt
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\$/g, "\\$")
+        .replace(/`/g, "\\`");
+      const result = execSync(`opencode run "${escapedPrompt}"`, {
         encoding: "utf-8",
         timeout: 120000,
         maxBuffer: 10 * 1024 * 1024,

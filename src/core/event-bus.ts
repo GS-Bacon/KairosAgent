@@ -4,6 +4,14 @@ interface EventSubscription {
   unsubscribe: () => void;
 }
 
+export interface CriticalAlert {
+  alertType: "ai_providers_broken" | "system_failure";
+  message: string;
+  timestamp: Date;
+  affectedProviders?: string[];
+  context?: Record<string, unknown>;
+}
+
 export type KairosEvent =
   | { type: "cycle_started"; timestamp: Date }
   | { type: "cycle_completed"; timestamp: Date; duration: number }
@@ -12,7 +20,10 @@ export type KairosEvent =
   | { type: "issue_detected"; issue: { type: string; description: string } }
   | { type: "modification"; file: string; changeType: string; description: string }
   | { type: "rollback"; reason: string; snapshotId: string }
-  | { type: "error"; error: string; context?: Record<string, unknown> };
+  | { type: "error"; error: string; context?: Record<string, unknown> }
+  | { type: "trouble_captured"; trouble: { id: string; category: string; severity: string; message: string; phase: string }; timestamp: Date }
+  | { type: "critical_alert"; alert: CriticalAlert }
+  | { type: "provider_health_changed"; provider: string; oldStatus: string; newStatus: string; timestamp: Date };
 
 export class EventBus {
   private handlers: Map<string, Set<EventHandler>> = new Map();

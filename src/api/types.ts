@@ -1,5 +1,20 @@
+export interface CriticalAlertInfo {
+  type: string;
+  message: string;
+  timestamp: string;
+  affectedProviders?: string[];
+}
+
+export interface ProviderHealthInfo {
+  name: string;
+  status: "healthy" | "degraded" | "broken";
+  consecutiveFailures: number;
+  lastSuccess?: string;
+  lastFailure?: string;
+}
+
 export interface StatusResponse {
-  state: "running" | "idle" | "error";
+  state: "running" | "idle" | "error" | "critical";
   uptime_seconds: number;
   last_check?: string;
   stats: {
@@ -8,6 +23,8 @@ export interface StatusResponse {
     errors_7d: number;
   };
   next_check?: string;
+  criticalAlerts?: CriticalAlertInfo[];
+  providerHealth?: ProviderHealthInfo[];
 }
 
 export interface HealthResponse {
