@@ -1,3 +1,4 @@
+```typescript
 /**
  * ハイブリッドAIプロバイダー
  *
@@ -50,6 +51,13 @@ interface RateLimitState {
   consecutiveLimits: number;
 }
 
+interface TimeoutState {
+  isTimedOut: boolean;
+  timedOutAt: Date | null;
+  backoffUntil: Date | null;
+  consecutiveTimeouts: number;
+}
+
 export class HybridProvider implements AIProvider {
   name = "hybrid";
   private claudeProvider: ClaudeProvider;
@@ -68,9 +76,20 @@ export class HybridProvider implements AIProvider {
     consecutiveLimits: 0,
   };
 
+  private timeoutState: TimeoutState = {
+    isTimedOut: false,
+    timedOutAt: null,
+    backoffUntil: null,
+    consecutiveTimeouts: 0,
+  };
+
   // バックオフ設定（指数関数的）
   private readonly BASE_BACKOFF_MS = 60000; // 1分
   private readonly MAX_BACKOFF_MS = 600000; // 10分
+
+  // タイムアウト用バックオフ設定
+  private readonly TIMEOUT_BASE_BACKOFF_MS = 30000; // 30秒
+  private readonly TIMEOUT_MAX_BACKOFF_MS = 300000; // 5分
 
   constructor() {
     this.claudeProvider = new ClaudeProvider();
@@ -125,6 +144,20 @@ export class HybridProvider implements AIProvider {
   }
 
   /**
+   * タイムアウトエラーかどうかを判定
+   */
+  private isTimeoutError(err: Error): boolean {
+    const message = err.message.toLowerCase();
+    return (
+      message.includes("timeout") ||
+      message.includes("timed out") ||
+      message.includes("etimedout") ||
+      message.includes("esockettimedout") ||
+      message.includes("econnaborted")
+    );
+  }
+
+  /**
    * レートリミット状態を更新
    */
   private recordRateLimit(): void {
@@ -153,6 +186,30 @@ export class HybridProvider implements AIProvider {
   }
 
   /**
+   * タイムアウト状態を更新
+   */
+  private recordTimeout(): void {
+    const now = new Date();
+    this.timeoutState.isTimedOut = true;
+    this.timeoutState.timedOutAt = now;
+    this.timeoutState.consecutiveTimeouts++;
+
+    // 指数バックオフ計算（タイムアウト用）
+    const backoffMs = Math.min(
+      this.TIMEOUT_BASE_BACKOFF_MS * Math.pow(2, this.timeoutState.consecutiveTimeouts - 1),
+      this.TIMEOUT_MAX_BACKOFF_MS
+    );
+
+    this.timeoutState.backoffUntil = new Date(now.getTime() + backoffMs);
+
+    logger.warn("Claude timed out", {
+      consecutiveTimeouts: this.timeoutState.consecutiveTimeouts,
+      backoffMs,
+      backoffUntil: this.timeoutState.backoffUntil.toISOString(),
+    });
+  }
+
+  /**
    * レートリミットが解除されたかチェック
    */
   private isRateLimitExpired(): boolean {
@@ -163,9 +220,20 @@ export class HybridProvider implements AIProvider {
   }
 
   /**
-   * Claudeが利用可能かチェック（レートリミット考慮）
+   * タイムアウトバックオフが解除されたかチェック
+   */
+  private isTimeoutExpired(): boolean {
+    if (!this.timeoutState.backoffUntil) {
+      return true;
+    }
+    return new Date() > this.timeoutState.backoffUntil;
+  }
+
+  /**
+   * Claudeが利用可能かチェック（レートリミットとタイムアウト考慮）
    */
   private async isClaudeAvailable(): Promise<boolean> {
+    // レートリミットチェック
     if (this.rateLimitState.isLimited && !this.isRateLimitExpired()) {
       logger.debug("Claude still in rate limit backoff", {
         backoffUntil: this.rateLimitState.backoffUntil?.toISOString(),
@@ -173,13 +241,29 @@ export class HybridProvider implements AIProvider {
       return false;
     }
 
+    // タイムアウトチェック
+    if (this.timeoutState.isTimedOut && !this.isTimeoutExpired()) {
+      logger.debug("Claude still in timeout backoff", {
+        backoffUntil: this.timeoutState.backoffUntil?.toISOString(),
+      });
+      return false;
+    }
+
     try {
       const available = await this.claudeProvider.isAvailable();
-      if (available && this.rateLimitState.isLimited) {
+      if (available) {
         // レートリミット解除
-        logger.info("Claude rate limit cleared");
-        this.rateLimitState.isLimited = false;
-        this.rateLimitState.consecutiveLimits = 0;
+        if (this.rateLimitState.isLimited) {
+          logger.info("Claude rate limit cleared");
+          this.rateLimitState.isLimited = false;
+          this.rateLimitState.consecutiveLimits = 0;
+        }
+        // タイムアウト解除
+        if (this.timeoutState.isTimedOut) {
+          logger.info("Claude timeout cleared");
+          this.timeoutState.isTimedOut = false;
+          this.timeoutState.consecutiveTimeouts = 0;
+        }
       }
       return available;
     } catch {
@@ -213,18 +297,75 @@ export class HybridProvider implements AIProvider {
 
         return { result, usedProvider: "claude" };
       } catch (err) {
-        if (err instanceof Error && this.isRateLimitError(err)) {
-          this.recordRateLimit();
-          // 以下でGLMフォールバックを試みる
+        if (err instanceof Error) {
+          if (this.isRateLimitError(err)) {
+            this.recordRateLimit();
+            // 以下でフォールバックを試みる
+          } else if (this.isTimeoutError(err)) {
+            this.recordTimeout();
+            // 以下でフォールバックを試みる
+          } else {
+            throw err;
+          }
         } else {
           throw err;
         }
       }
     }
 
+    // OpenCodeにフォールバック（タイムアウト時優先）
+    if (this.timeoutState.isTimedOut && this.openCodeAvailable) {
+      logger.info("Falling back to OpenCode due to timeout", { phase: this.currentPhase });
+
+      const result = await operation(this.openCodeProvider);
+
+      // トークン使用量を記録（文字数ベースの推定）
+      if (context.inputText) {
+        const outputText = typeof result === "string" ? result : JSON.stringify(result);
+        tokenTracker.recordFromText(this.currentPhase, "opencode", context.inputText, outputText);
+      }
+
+      // 変更を追跡
+      if (shouldTrack) {
+        this.changeTracker.recordChange({
+          timestamp: new Date().toISOString(),
+          phase: this.currentPhase,
+          provider: "opencode",
+          files: context.files || [],
+          description: context.description.substring(0, 500),
+        });
+      }
+
+      return { result, usedProvider: "opencode" };
+    }
+
     // GLMにフォールバック
     if (!this.glmProvider || !this.glmAvailable) {
-      throw new Error("Claude rate limited and GLM not available");
+      // OpenCodeも試行
+      if (this.openCodeAvailable) {
+        logger.info("Falling back to OpenCode (GLM not available)", { phase: this.currentPhase });
+
+        const result = await operation(this.openCodeProvider);
+
+        if (context.inputText) {
+          const outputText = typeof result === "string" ? result : JSON.stringify(result);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", context.inputText, outputText);
+        }
+
+        if (shouldTrack) {
+          this.changeTracker.recordChange({
+            timestamp: new Date().toISOString(),
+            phase: this.currentPhase,
+            provider: "opencode",
+            files: context.files || [],
+            description: context.description.substring(0, 500),
+          });
+        }
+
+        return { result, usedProvider: "opencode" };
+      }
+
+      throw new Error("Claude unavailable (rate limited or timed out) and no fallback provider available");
     }
 
     logger.info("Falling back to GLM", { phase: this.currentPhase });
@@ -331,41 +472,145 @@ export class HybridProvider implements AIProvider {
     }
 
     const provider = this.getProviderForPhase();
-    const result = await provider.generateCode(prompt, context);
 
-    // トークン使用量を記録
-    tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, result);
+    try {
+      const result = await provider.generateCode(prompt, context);
 
-    return result;
+      // トークン使用量を記録
+      tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, result);
+
+      return result;
+    } catch (err) {
+      // タイムアウト時のフォールバック処理
+      if (err instanceof Error && this.isTimeoutError(err)) {
+        this.recordTimeout();
+
+        // OpenCodeにフォールバック
+        if (this.openCodeAvailable) {
+          logger.info("generateCode: Falling back to OpenCode due to timeout");
+          const result = await this.openCodeProvider.generateCode(prompt, context);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", inputText, result);
+          return result;
+        }
+
+        // GLMにフォールバック
+        if (this.glmProvider && this.glmAvailable) {
+          logger.info("generateCode: Falling back to GLM due to timeout");
+          const result = await this.glmProvider.generateCode(prompt, context);
+          tokenTracker.recordFromText(this.currentPhase, "glm", inputText, result);
+          return result;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async generateTest(code: string, context: TestContext): Promise<string> {
     const provider = this.getProviderForPhase();
     const inputText = `${code}\n${context.existingTests || ""}`;
-    const result = await provider.generateTest(code, context);
 
-    tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, result);
+    try {
+      const result = await provider.generateTest(code, context);
 
-    return result;
+      tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, result);
+
+      return result;
+    } catch (err) {
+      // タイムアウト時のフォールバック処理
+      if (err instanceof Error && this.isTimeoutError(err)) {
+        this.recordTimeout();
+
+        // OpenCodeにフォールバック
+        if (this.openCodeAvailable) {
+          logger.info("generateTest: Falling back to OpenCode due to timeout");
+          const result = await this.openCodeProvider.generateTest(code, context);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", inputText, result);
+          return result;
+        }
+
+        // GLMにフォールバック
+        if (this.glmProvider && this.glmAvailable) {
+          logger.info("generateTest: Falling back to GLM due to timeout");
+          const result = await this.glmProvider.generateTest(code, context);
+          tokenTracker.recordFromText(this.currentPhase, "glm", inputText, result);
+          return result;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async analyzeCode(code: string): Promise<Analysis> {
     const provider = this.getProviderForPhase();
-    const result = await provider.analyzeCode(code);
 
-    tokenTracker.recordFromText(this.currentPhase, provider.name, code, JSON.stringify(result));
+    try {
+      const result = await provider.analyzeCode(code);
 
-    return result;
+      tokenTracker.recordFromText(this.currentPhase, provider.name, code, JSON.stringify(result));
+
+      return result;
+    } catch (err) {
+      // タイムアウト時のフォールバック処理
+      if (err instanceof Error && this.isTimeoutError(err)) {
+        this.recordTimeout();
+
+        // OpenCodeにフォールバック
+        if (this.openCodeAvailable) {
+          logger.info("analyzeCode: Falling back to OpenCode due to timeout");
+          const result = await this.openCodeProvider.analyzeCode(code);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", code, JSON.stringify(result));
+          return result;
+        }
+
+        // GLMにフォールバック
+        if (this.glmProvider && this.glmAvailable) {
+          logger.info("analyzeCode: Falling back to GLM due to timeout");
+          const result = await this.glmProvider.analyzeCode(code);
+          tokenTracker.recordFromText(this.currentPhase, "glm", code, JSON.stringify(result));
+          return result;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async searchAndAnalyze(query: string, codebase: string[]): Promise<SearchResult> {
     const provider = this.getProviderForPhase();
     const inputText = `${query}\n${codebase.slice(0, 20).join("\n")}`;
-    const result = await provider.searchAndAnalyze(query, codebase);
 
-    tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, JSON.stringify(result));
+    try {
+      const result = await provider.searchAndAnalyze(query, codebase);
 
-    return result;
+      tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, JSON.stringify(result));
+
+      return result;
+    } catch (err) {
+      // タイムアウト時のフォールバック処理
+      if (err instanceof Error && this.isTimeoutError(err)) {
+        this.recordTimeout();
+
+        // OpenCodeにフォールバック
+        if (this.openCodeAvailable) {
+          logger.info("searchAndAnalyze: Falling back to OpenCode due to timeout");
+          const result = await this.openCodeProvider.searchAndAnalyze(query, codebase);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", inputText, JSON.stringify(result));
+          return result;
+        }
+
+        // GLMにフォールバック
+        if (this.glmProvider && this.glmAvailable) {
+          logger.info("searchAndAnalyze: Falling back to GLM due to timeout");
+          const result = await this.glmProvider.searchAndAnalyze(query, codebase);
+          tokenTracker.recordFromText(this.currentPhase, "glm", inputText, JSON.stringify(result));
+          return result;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async chat(prompt: string): Promise<string> {
@@ -387,11 +632,37 @@ export class HybridProvider implements AIProvider {
     }
 
     const provider = this.getProviderForPhase();
-    const result = await provider.chat(prompt);
 
-    tokenTracker.recordFromText(this.currentPhase, provider.name, prompt, result);
+    try {
+      const result = await provider.chat(prompt);
 
-    return result;
+      tokenTracker.recordFromText(this.currentPhase, provider.name, prompt, result);
+
+      return result;
+    } catch (err) {
+      // タイムアウト時のフォールバック処理
+      if (err instanceof Error && this.isTimeoutError(err)) {
+        this.recordTimeout();
+
+        // OpenCodeにフォールバック
+        if (this.openCodeAvailable) {
+          logger.info("chat: Falling back to OpenCode due to timeout");
+          const result = await this.openCodeProvider.chat(prompt);
+          tokenTracker.recordFromText(this.currentPhase, "opencode", prompt, result);
+          return result;
+        }
+
+        // GLMにフォールバック
+        if (this.glmProvider && this.glmAvailable) {
+          logger.info("chat: Falling back to GLM due to timeout");
+          const result = await this.glmProvider.chat(prompt);
+          tokenTracker.recordFromText(this.currentPhase, "glm", prompt, result);
+          return result;
+        }
+      }
+
+      throw err;
+    }
   }
 
   async isAvailable(): Promise<boolean> {
@@ -414,7 +685,7 @@ export class HybridProvider implements AIProvider {
     });
 
     // Claudeまたは（GLM + OpenCode）が使えればOK
-    return claudeAvailable || (this.glmAvailable && this.openCodeAvailable);
+    return claudeAvailable || (this.glmAvailable && this.openCodeAvailable) || this.openCodeAvailable;
   }
 
   /**
@@ -422,6 +693,13 @@ export class HybridProvider implements AIProvider {
    */
   getRateLimitState(): RateLimitState {
     return { ...this.rateLimitState };
+  }
+
+  /**
+   * タイムアウト状態を取得
+   */
+  getTimeoutState(): TimeoutState {
+    return { ...this.timeoutState };
   }
 
   /**
@@ -438,3 +716,5 @@ export class HybridProvider implements AIProvider {
     return this.changeTracker.cleanup(maxAgeDays);
   }
 }
+```
+[<u[?1004l[?2004l[?25h[?25h

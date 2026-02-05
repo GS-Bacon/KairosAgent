@@ -12,14 +12,18 @@ export class GoalManager {
   }
 
   private load(): GoalData {
+    logger.debug("Loading goals from file", { path: GOALS_FILE, exists: existsSync(GOALS_FILE) });
     if (existsSync(GOALS_FILE)) {
       try {
         const content = readFileSync(GOALS_FILE, "utf-8");
-        return JSON.parse(content);
+        const data = JSON.parse(content);
+        logger.debug("Goals loaded", { goalsCount: data.goals?.length || 0 });
+        return data;
       } catch (err) {
         logger.error("Failed to load goals", { error: String(err) });
       }
     }
+    logger.debug("No goals file found, returning empty data");
     return { goals: [], progress: [] };
   }
 

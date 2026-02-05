@@ -4,7 +4,7 @@ import { orchestrator } from "./core/orchestrator.js";
 import { APIServer } from "./api/server.js";
 import { initializeAI, AIConfig } from "./ai/factory.js";
 import { guard } from "./safety/guard.js";
-import { goalManager } from "./goals/manager.js";
+import { goalManager } from "./goals/index.js";
 import { existsSync, readFileSync, mkdirSync } from "fs";
 
 interface GitConfig {
