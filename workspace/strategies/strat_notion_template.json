@@ -1,0 +1,33 @@
+{
+  "id": "strat_notion_template",
+  "name": "Notionテンプレート販売",
+  "description": "フリーランス・個人開発者向けのNotionテンプレートを作成し、BOOTHやGumroadで¥300-980で販売。タスク管理、プロジェクト管理、日報テンプレートなど。",
+  "type": "digital_product",
+  "status": "active",
+  "expectedRevenue": 500,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-05T00:00:00.000Z",
+  "activatedAt": "2026-02-05T00:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["BOOTH", "Gumroad"],
+    "priceRange": {"min": 300, "max": 980},
+    "templateTypes": ["タスク管理", "プロジェクト管理", "日報", "読書記録", "習慣トラッカー"],
+    "targetTemplatesPerMonth": 2
+  },
+  "metadata": {
+    "difficulty": "beginner",
+    "aiAutonomy": 85,
+    "requiredExperience": 0,
+    "humanInteractionRequired": false,
+    "requiredCapabilities": ["plan-generator"]
+  }
+}

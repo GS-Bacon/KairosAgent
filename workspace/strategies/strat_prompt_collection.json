@@ -1,0 +1,33 @@
+{
+  "id": "strat_prompt_collection",
+  "name": "ChatGPT/Claudeプロンプト集",
+  "description": "業務効率化に使えるプロンプト集をPDF形式で作成し、BOOTHやnoteで¥500-1500で販売。カテゴリ別（ライティング、プログラミング、企画など）に整理。",
+  "type": "digital_product",
+  "status": "active",
+  "expectedRevenue": 600,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-05T00:00:00.000Z",
+  "activatedAt": "2026-02-05T00:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["BOOTH", "note"],
+    "priceRange": {"min": 500, "max": 1500},
+    "categories": ["ライティング", "プログラミング", "企画・アイデア出し", "データ分析", "翻訳・校正"],
+    "targetProductsPerMonth": 1
+  },
+  "metadata": {
+    "difficulty": "beginner",
+    "aiAutonomy": 85,
+    "requiredExperience": 0,
+    "humanInteractionRequired": false,
+    "requiredCapabilities": ["plan-generator"]
+  }
+}

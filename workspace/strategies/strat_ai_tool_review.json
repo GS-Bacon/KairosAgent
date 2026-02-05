@@ -1,0 +1,33 @@
+{
+  "id": "strat_ai_tool_review",
+  "name": "AIツールレビュー記事",
+  "description": "ChatGPT、Claude、Gemini等のAIツールを比較レビューする記事を作成。note、zenn、qiitaに投稿し、ASPアフィリエイト収益を得る。AI活用に興味を持つ層へリーチ。",
+  "type": "affiliate",
+  "status": "active",
+  "expectedRevenue": 300,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-05T00:00:00.000Z",
+  "activatedAt": "2026-02-05T00:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["note", "zenn", "qiita"],
+    "topics": ["ChatGPT", "Claude", "Gemini", "AI比較", "プロンプトエンジニアリング"],
+    "targetArticlesPerMonth": 4,
+    "affiliatePrograms": ["A8.net", "もしもアフィリエイト"]
+  },
+  "metadata": {
+    "difficulty": "beginner",
+    "aiAutonomy": 90,
+    "requiredExperience": 0,
+    "humanInteractionRequired": false,
+    "requiredCapabilities": ["article-writer", "keyword-research"]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "strat_tech_blog",
+  "name": "技術解説ブログ記事",
+  "description": "KMP（Kotlin Multiplatform）、Next.js、TypeScript等の技術解説記事を作成。技術ブランディングを確立し、将来のコンサルティングや有料コンテンツへの導線を構築。",
+  "type": "content_creation",
+  "status": "active",
+  "expectedRevenue": 200,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-05T00:00:00.000Z",
+  "activatedAt": "2026-02-05T00:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["zenn", "qiita"],
+    "topics": ["Kotlin Multiplatform", "Next.js", "TypeScript", "React", "Claude Code"],
+    "targetArticlesPerMonth": 4
+  },
+  "metadata": {
+    "difficulty": "intermediate",
+    "aiAutonomy": 75,
+    "requiredExperience": 0,
+    "humanInteractionRequired": false,
+    "requiredCapabilities": ["article-writer", "keyword-research"]
+  }
+}

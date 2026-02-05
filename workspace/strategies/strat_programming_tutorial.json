@@ -1,0 +1,33 @@
+{
+  "id": "strat_programming_tutorial",
+  "name": "プログラミング入門チュートリアル",
+  "description": "Python・JavaScript初心者向けのチュートリアル記事を作成。プログラミングスクールや技術書籍のアフィリエイトリンクを設置し収益化。",
+  "type": "affiliate",
+  "status": "active",
+  "expectedRevenue": 400,
+  "expectedCost": 0,
+  "riskLevel": 0,
+  "createdAt": "2026-02-05T00:00:00.000Z",
+  "activatedAt": "2026-02-05T00:00:00.000Z",
+  "performance": {
+    "totalRevenue": 0,
+    "totalCost": 0,
+    "executionCount": 0,
+    "successCount": 0,
+    "failureCount": 0,
+    "roi": 0
+  },
+  "config": {
+    "platforms": ["zenn", "qiita", "note"],
+    "topics": ["Python入門", "JavaScript基礎", "Web開発", "プログラミング学習"],
+    "targetArticlesPerMonth": 4,
+    "affiliatePrograms": ["Amazonアソシエイト", "A8.net"]
+  },
+  "metadata": {
+    "difficulty": "beginner",
+    "aiAutonomy": 90,
+    "requiredExperience": 0,
+    "humanInteractionRequired": false,
+    "requiredCapabilities": ["article-writer", "keyword-research"]
+  }
+}
