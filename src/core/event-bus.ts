@@ -23,7 +23,8 @@ export type KairosEvent =
   | { type: "error"; error: string; context?: Record<string, unknown> }
   | { type: "trouble_captured"; trouble: { id: string; category: string; severity: string; message: string; phase: string }; timestamp: Date }
   | { type: "critical_alert"; alert: CriticalAlert }
-  | { type: "provider_health_changed"; provider: string; oldStatus: string; newStatus: string; timestamp: Date };
+  | { type: "provider_health_changed"; provider: string; oldStatus: string; newStatus: string; timestamp: Date }
+  | { type: "health_repair_attempted"; checkName: string; success: boolean; details: string; timestamp: Date };
 
 export class EventBus {
   private handlers: Map<string, Set<EventHandler>> = new Map();

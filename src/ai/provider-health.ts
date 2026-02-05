@@ -254,9 +254,135 @@ Please analyze this error and suggest a fix. If this is a configuration or integ
 
     return alerts;
   }
+
+  /**
+   * 全プロバイダーの状態レポートを取得
+   */
+  getHealthReport(): {
+    providers: Record<string, ProviderHealth>;
+    overallStatus: ProviderStatus;
+    criticalAlerts: CriticalAlert[];
+  } {
+    const allHealth = this.getAllHealth();
+    const providers: Record<string, ProviderHealth> = {};
+
+    for (const health of allHealth) {
+      providers[health.name] = health;
+    }
+
+    let overallStatus: ProviderStatus = "healthy";
+    const brokenCount = allHealth.filter((h) => h.status === "broken").length;
+    const degradedCount = allHealth.filter((h) => h.status === "degraded").length;
+
+    if (brokenCount === allHealth.length && allHealth.length > 0) {
+      overallStatus = "broken";
+    } else if (brokenCount > 0 || degradedCount > 0) {
+      overallStatus = "degraded";
+    }
+
+    return {
+      providers,
+      overallStatus,
+      criticalAlerts: this.getCriticalAlerts(),
+    };
+  }
+
+  /**
+   * フォールバック順序を取得（healthyなプロバイダーを優先）
+   */
+  getFallbackOrder(): AIProvider[] {
+    const allHealth = this.getAllHealth();
+    const orderedProviders: AIProvider[] = [];
+
+    // 優先度: healthy > degraded > broken
+    const statusOrder: ProviderStatus[] = ["healthy", "degraded", "broken"];
+
+    for (const status of statusOrder) {
+      for (const health of allHealth) {
+        if (health.status === status) {
+          const provider = this.providers.get(health.name);
+          if (provider) {
+            orderedProviders.push(provider);
+          }
+        }
+      }
+    }
+
+    return orderedProviders;
+  }
+
+  /**
+   * brokenプロバイダーの回復をチェック
+   */
+  async checkBrokenProviderRecovery(): Promise<void> {
+    const allHealth = this.getAllHealth();
+    const brokenProviders = allHealth.filter((h) => h.status === "broken");
+
+    for (const health of brokenProviders) {
+      // 最後の失敗から5分以上経過している場合のみテスト
+      if (health.lastFailure) {
+        const elapsed = Date.now() - health.lastFailure.getTime();
+        if (elapsed < 5 * 60 * 1000) {
+          continue;
+        }
+      }
+
+      logger.info("Testing broken provider for recovery", {
+        provider: health.name,
+      });
+
+      const recovered = await this.testProvider(health.name);
+      if (recovered) {
+        logger.info("Provider recovered", { provider: health.name });
+      } else {
+        logger.debug("Provider still broken", { provider: health.name });
+      }
+    }
+  }
+
+  /**
+   * フォールバック付きで関数を実行
+   */
+  async executeWithFallback<T>(
+    operation: (provider: AIProvider) => Promise<T>
+  ): Promise<T> {
+    const orderedProviders = this.getFallbackOrder();
+
+    if (orderedProviders.length === 0) {
+      throw new Error("No providers available");
+    }
+
+    let lastError: Error | null = null;
+
+    for (const provider of orderedProviders) {
+      const health = this.healthState.get(provider.name);
+      if (health?.status === "broken") {
+        // brokenプロバイダーはスキップ（ただし全てbrokenなら試す）
+        if (orderedProviders.some((p) => this.healthState.get(p.name)?.status !== "broken")) {
+          continue;
+        }
+      }
+
+      try {
+        const result = await operation(provider);
+        this.recordSuccess(provider.name);
+        return result;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        this.recordFailure(provider.name, lastError);
+        logger.warn("Provider failed, trying fallback", {
+          provider: provider.name,
+          error: lastError.message,
+        });
+      }
+    }
+
+    throw lastError || new Error("All providers failed");
+  }
 }
 
 let globalHealthMonitor: ProviderHealthMonitor | null = null;
+let recoveryCheckInterval: NodeJS.Timeout | null = null;
 
 export function initializeHealthMonitor(
   providers: AIProvider[],
@@ -266,9 +392,31 @@ export function initializeHealthMonitor(
   for (const provider of providers) {
     globalHealthMonitor.registerProvider(provider);
   }
+
+  // 定期的にbrokenプロバイダーの回復をチェック（5分ごと）
+  if (recoveryCheckInterval) {
+    clearInterval(recoveryCheckInterval);
+  }
+  recoveryCheckInterval = setInterval(async () => {
+    if (globalHealthMonitor) {
+      await globalHealthMonitor.checkBrokenProviderRecovery();
+    }
+  }, 5 * 60 * 1000);
+
   return globalHealthMonitor;
 }
 
 export function getHealthMonitor(): ProviderHealthMonitor | null {
   return globalHealthMonitor;
+}
+
+/**
+ * ヘルスモニターを停止
+ */
+export function stopHealthMonitor(): void {
+  if (recoveryCheckInterval) {
+    clearInterval(recoveryCheckInterval);
+    recoveryCheckInterval = null;
+  }
+  globalHealthMonitor = null;
 }

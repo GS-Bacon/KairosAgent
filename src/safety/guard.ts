@@ -15,12 +15,23 @@ export interface GuardConfig {
 
 export interface AIReviewResult {
   timestamp: string;
-  code: string;
+  code: string;          // 全コード（旧: 500文字まで）
+  codeLength: number;    // コードの全長
   warnings: string[];
   context: string;
+  dangerousPatterns: string[];  // 検出された危険パターン
   claudeVerdict: { approved: boolean; reason: string } | null;
   openCodeVerdict: { approved: boolean; reason: string } | null;
   finalDecision: "approved" | "rejected";
+  decisionReason: string;       // 判定理由の詳細
+}
+
+export interface PathValidationResult {
+  valid: boolean;
+  originalPath: string;
+  correctedPath?: string;
+  error?: string;
+  errorType?: "duplicate-prefix" | "invalid-chars" | "outside-workspace";
 }
 
 const DEFAULT_CONFIG: GuardConfig = {
@@ -250,21 +261,79 @@ JSONのみを出力してください。`;
       }
     }
 
-    // ログに記録
+    // 検出された危険パターンのリスト
+    const detectedPatterns = this.extractDangerousPatterns(code);
+
+    // ログに記録（全コード保存、保持期間延長のため詳細に）
     const result: AIReviewResult = {
       timestamp: new Date().toISOString(),
-      code: code.slice(0, 500),
+      code: code,  // 全コード保存
+      codeLength: code.length,
       warnings,
       context,
+      dangerousPatterns: detectedPatterns,
       claudeVerdict,
       openCodeVerdict,
       finalDecision,
+      decisionReason: reason,
     };
     this.reviewLog.push(result);
+
+    // 古いログを削除（30日分を保持）
+    this.pruneOldReviewLogs();
     this.saveReviewLog();
 
-    logger.info("AI security review completed", { finalDecision, reason });
+    logger.info("AI security review completed", {
+      finalDecision,
+      reason,
+      codeLength: code.length,
+      dangerousPatterns: detectedPatterns,
+    });
     return { approved: finalDecision === "approved", reason };
+  }
+
+  /**
+   * コードから危険パターンを抽出
+   */
+  private extractDangerousPatterns(code: string): string[] {
+    const patterns: string[] = [];
+    const dangerousPatterns = [
+      { pattern: /eval\s*\(/, name: "eval()" },
+      { pattern: /exec\s*\(/, name: "exec()" },
+      { pattern: /child_process/, name: "child_process" },
+      { pattern: /rm\s+-rf/, name: "rm -rf" },
+      { pattern: /process\.exit/, name: "process.exit" },
+      { pattern: /require\s*\(\s*['"`]\s*\+/, name: "dynamic require" },
+      { pattern: /spawn\s*\(/, name: "spawn()" },
+      { pattern: /execSync\s*\(/, name: "execSync()" },
+      { pattern: /writeFileSync\s*\([^)]*\/etc\//, name: "write to /etc" },
+      { pattern: /fetch\s*\([^)]*file:\/\//, name: "file:// fetch" },
+    ];
+
+    for (const { pattern, name } of dangerousPatterns) {
+      if (pattern.test(code)) {
+        patterns.push(name);
+      }
+    }
+
+    return patterns;
+  }
+
+  /**
+   * 30日より古いレビューログを削除
+   */
+  private pruneOldReviewLogs(): void {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const threshold = thirtyDaysAgo.toISOString();
+
+    const beforeCount = this.reviewLog.length;
+    this.reviewLog = this.reviewLog.filter((r) => r.timestamp >= threshold);
+    const prunedCount = beforeCount - this.reviewLog.length;
+
+    if (prunedCount > 0) {
+      logger.debug("Pruned old review logs", { prunedCount, remaining: this.reviewLog.length });
+    }
   }
 
   getOpenCodeTrustScore(): number {
@@ -305,6 +374,88 @@ JSONのみを出力してください。`;
   updateConfig(updates: Partial<GuardConfig>): void {
     this.config = { ...this.config, ...updates };
     logger.info("Guard config updated", { config: this.config });
+  }
+
+  /**
+   * パスを正規化する
+   * - 重複プレフィックス（src/src/）を除去
+   * - 連続スラッシュを単一スラッシュに
+   * - 先頭の ./ を除去
+   */
+  normalizePath(filePath: string): string {
+    let normalized = filePath;
+
+    // 先頭の ./ を除去
+    normalized = normalized.replace(/^\.\//, "");
+
+    // 連続スラッシュを単一スラッシュに
+    normalized = normalized.replace(/\/+/g, "/");
+
+    // 重複プレフィックスを除去（src/src/ → src/）
+    const duplicatePrefixPattern = /^(src|workspace|dist|apps)(\/\1)+\//;
+    while (duplicatePrefixPattern.test(normalized)) {
+      normalized = normalized.replace(duplicatePrefixPattern, "$1/");
+    }
+
+    // より単純なケース: src/src/ → src/
+    while (normalized.includes("src/src/")) {
+      normalized = normalized.replace(/src\/src\//g, "src/");
+    }
+    while (normalized.includes("workspace/workspace/")) {
+      normalized = normalized.replace(/workspace\/workspace\//g, "workspace/");
+    }
+
+    return normalized;
+  }
+
+  /**
+   * パスを検証し、問題があれば修正案を返す
+   */
+  validatePath(filePath: string): PathValidationResult {
+    const originalPath = filePath;
+
+    // ディレクトリトラバーサルの検出（../ を含む）
+    if (filePath.includes("../") || filePath.includes("..\\")) {
+      return {
+        valid: false,
+        originalPath,
+        error: "Directory traversal detected",
+        errorType: "outside-workspace",
+      };
+    }
+
+    // 危険な文字の検出
+    const invalidCharsPattern = /[<>:"|?*\x00-\x1f]/;
+    if (invalidCharsPattern.test(filePath)) {
+      return {
+        valid: false,
+        originalPath,
+        error: "Invalid characters in path",
+        errorType: "invalid-chars",
+      };
+    }
+
+    // 正規化を試みる
+    const normalized = this.normalizePath(filePath);
+
+    // パスが変更された場合、重複プレフィックスがあった
+    if (normalized !== filePath.replace(/^\.\//, "")) {
+      logger.warn("Path normalization applied", {
+        original: filePath,
+        normalized,
+      });
+      return {
+        valid: true,
+        originalPath,
+        correctedPath: normalized,
+        errorType: "duplicate-prefix",
+      };
+    }
+
+    return {
+      valid: true,
+      originalPath,
+    };
   }
 }
 

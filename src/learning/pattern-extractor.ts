@@ -15,8 +15,26 @@ import {
 import { patternRepository } from "./pattern-repository.js";
 import { aiAnalyzer } from "./ai-analyzer.js";
 import { logger } from "../core/logger.js";
+import { Trouble } from "../trouble/types.js";
+
+/**
+ * 失敗パターン情報
+ * 同じ失敗を避けるための参照データ
+ */
+export interface FailurePattern {
+  id: string;
+  troubleCategory: string;
+  troubleMessage: string;
+  troubleFile?: string;
+  attemptedFixes: string[];
+  failureReason: string;
+  createdAt: string;
+  occurrenceCount: number;
+}
 
 export class PatternExtractor {
+  private failurePatterns: Map<string, FailurePattern> = new Map();
+
   /**
    * 解決結果からパターンを抽出
    */
@@ -436,6 +454,120 @@ export class PatternExtractor {
     }
 
     return patterns;
+  }
+
+  /**
+   * 失敗から学習する
+   * 同じ失敗を避けるためのパターンを記録
+   */
+  extractFromFailure(
+    trouble: Trouble,
+    attemptedFixes: string[],
+    failureReason: string
+  ): FailurePattern {
+    // 既存の類似失敗パターンを検索
+    const existingKey = this.findSimilarFailureKey(trouble);
+
+    if (existingKey) {
+      const existing = this.failurePatterns.get(existingKey)!;
+      existing.occurrenceCount++;
+      // 新しい試行を追加（重複は避ける）
+      for (const fix of attemptedFixes) {
+        if (!existing.attemptedFixes.includes(fix)) {
+          existing.attemptedFixes.push(fix);
+        }
+      }
+      logger.debug("Updated existing failure pattern", {
+        id: existing.id,
+        occurrenceCount: existing.occurrenceCount,
+      });
+      return existing;
+    }
+
+    // 新しい失敗パターンを作成
+    const failurePattern: FailurePattern = {
+      id: `failure_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      troubleCategory: trouble.category,
+      troubleMessage: trouble.message,
+      troubleFile: trouble.file,
+      attemptedFixes,
+      failureReason,
+      createdAt: new Date().toISOString(),
+      occurrenceCount: 1,
+    };
+
+    this.failurePatterns.set(failurePattern.id, failurePattern);
+
+    logger.info("New failure pattern recorded", {
+      id: failurePattern.id,
+      category: trouble.category,
+      message: trouble.message.slice(0, 100),
+    });
+
+    return failurePattern;
+  }
+
+  /**
+   * 類似の失敗パターンのキーを検索
+   */
+  private findSimilarFailureKey(trouble: Trouble): string | null {
+    for (const [key, pattern] of this.failurePatterns) {
+      if (
+        pattern.troubleCategory === trouble.category &&
+        pattern.troubleFile === trouble.file &&
+        this.isSimilarMessage(pattern.troubleMessage, trouble.message)
+      ) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * メッセージが類似しているかチェック
+   */
+  private isSimilarMessage(a: string, b: string): boolean {
+    // 完全一致
+    if (a === b) return true;
+
+    // 類似度計算
+    const similarity = this.calculateSimilarity(a, b);
+    return similarity > 0.7;
+  }
+
+  /**
+   * 失敗パターンを取得（新しい修正を試みる前にチェック用）
+   */
+  getFailurePatterns(): FailurePattern[] {
+    return Array.from(this.failurePatterns.values());
+  }
+
+  /**
+   * 特定のトラブルに対して既に試行された修正を取得
+   */
+  getAttemptedFixes(trouble: Trouble): string[] {
+    const key = this.findSimilarFailureKey(trouble);
+    if (key) {
+      const pattern = this.failurePatterns.get(key);
+      return pattern?.attemptedFixes || [];
+    }
+    return [];
+  }
+
+  /**
+   * 繰り返し失敗しているパターンを取得
+   */
+  getRepeatedFailures(minOccurrences: number = 3): FailurePattern[] {
+    return Array.from(this.failurePatterns.values()).filter(
+      (p) => p.occurrenceCount >= minOccurrences
+    );
+  }
+
+  /**
+   * 失敗パターンをクリア（テスト用）
+   */
+  clearFailurePatterns(): void {
+    this.failurePatterns.clear();
   }
 }
 

@@ -18,9 +18,9 @@ export interface StatusResponse {
   uptime_seconds: number;
   last_check?: string;
   stats: {
-    modifications_7d: number;
-    rollbacks_7d: number;
-    errors_7d: number;
+    modifications_30d: number;
+    rollbacks_30d: number;
+    errors_30d: number;
   };
   next_check?: string;
   criticalAlerts?: CriticalAlertInfo[];

@@ -229,8 +229,18 @@ export class PatternRepository {
 
   /**
    * サイクル完了を記録
+   *
+   * @param patternHits パターンマッチ数
+   * @param aiCalls AI呼び出し数
+   * @param usedPatternIds 使用されたパターンIDリスト
+   * @param success サイクル成功かどうか
    */
-  recordCycleCompletion(patternHits: number, aiCalls: number): void {
+  recordCycleCompletion(
+    patternHits: number,
+    aiCalls: number,
+    usedPatternIds?: string[],
+    success?: boolean
+  ): void {
     this.stats.totalCycles++;
     this.stats.patternHits += patternHits;
     this.stats.aiCalls += aiCalls;
@@ -239,6 +249,17 @@ export class PatternRepository {
     const totalOperations = this.stats.patternHits + this.stats.aiCalls;
     this.stats.patternHitRate =
       totalOperations > 0 ? this.stats.patternHits / totalOperations : 0;
+
+    // 使用されたパターンの成功/失敗を記録
+    if (usedPatternIds && usedPatternIds.length > 0 && success !== undefined) {
+      for (const patternId of usedPatternIds) {
+        this.updateConfidence(patternId, success);
+      }
+      logger.debug("Pattern confidence updated for used patterns", {
+        patternCount: usedPatternIds.length,
+        success,
+      });
+    }
 
     // 平均信頼度を計算
     const patterns = this.getAllPatterns();
@@ -302,6 +323,100 @@ export class PatternRepository {
     });
 
     this.patterns.set(id, pattern);
+  }
+
+  /**
+   * 非効果的パターンを自動廃棄
+   * 条件: usageCount >= 10 かつ confidence < 0.1
+   *
+   * @returns 廃棄されたパターン数
+   */
+  pruneIneffectivePatterns(): number {
+    const minUsage = 10;
+    const minConfidence = 0.1;
+    const prunedIds: string[] = [];
+
+    for (const [id, pattern] of this.patterns) {
+      if (
+        pattern.stats.usageCount >= minUsage &&
+        pattern.stats.confidence < minConfidence
+      ) {
+        prunedIds.push(id);
+      }
+    }
+
+    for (const id of prunedIds) {
+      const pattern = this.patterns.get(id);
+      logger.warn("Pruning ineffective pattern", {
+        id,
+        name: pattern?.name,
+        usageCount: pattern?.stats.usageCount,
+        confidence: pattern?.stats.confidence,
+      });
+      this.patterns.delete(id);
+    }
+
+    if (prunedIds.length > 0) {
+      logger.info("Ineffective patterns pruned", { count: prunedIds.length });
+    }
+
+    return prunedIds.length;
+  }
+
+  /**
+   * 古くて使用されていないパターンを廃棄
+   * 条件: 最終使用から90日以上経過 かつ usageCount < 5
+   *
+   * @returns 廃棄されたパターン数
+   */
+  pruneStalePatterns(): number {
+    const maxStaleDays = 90;
+    const minUsage = 5;
+    const now = new Date();
+    const prunedIds: string[] = [];
+
+    for (const [id, pattern] of this.patterns) {
+      const lastUsed = new Date(pattern.stats.lastUsed);
+      const staleDays = (now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60 * 24);
+
+      if (staleDays >= maxStaleDays && pattern.stats.usageCount < minUsage) {
+        prunedIds.push(id);
+      }
+    }
+
+    for (const id of prunedIds) {
+      const pattern = this.patterns.get(id);
+      logger.warn("Pruning stale pattern", {
+        id,
+        name: pattern?.name,
+        lastUsed: pattern?.stats.lastUsed,
+        usageCount: pattern?.stats.usageCount,
+      });
+      this.patterns.delete(id);
+    }
+
+    if (prunedIds.length > 0) {
+      logger.info("Stale patterns pruned", { count: prunedIds.length });
+    }
+
+    return prunedIds.length;
+  }
+
+  /**
+   * 全てのメンテナンス処理を実行（日次/週次で呼び出す用）
+   */
+  async runMaintenance(): Promise<{
+    prunedIneffective: number;
+    prunedStale: number;
+  }> {
+    const prunedIneffective = this.pruneIneffectivePatterns();
+    const prunedStale = this.pruneStalePatterns();
+
+    if (prunedIneffective > 0 || prunedStale > 0) {
+      await this.save();
+    }
+
+    return { prunedIneffective, prunedStale };
   }
 }
 

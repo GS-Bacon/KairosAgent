@@ -33,6 +33,9 @@ export class Orchestrator {
   private currentContext: CycleContext | null = null;
   private lastFailedPhase: string | null = null;
   private hasCriticalFailure: boolean = false;
+  private consecutiveCycleFailures: number = 0;
+  private systemPaused: boolean = false;
+  private readonly MAX_CONSECUTIVE_FAILURES = 5;
 
   constructor() {
     this.phases = [
@@ -51,6 +54,22 @@ export class Orchestrator {
     if (this.isRunning) {
       logger.warn("Cycle already running, skipping");
       throw new Error("Cycle already in progress");
+    }
+
+    // システム一時停止中のチェック
+    if (this.systemPaused) {
+      logger.warn("System is paused due to consecutive failures", {
+        consecutiveFailures: this.consecutiveCycleFailures,
+      });
+      return {
+        cycleId: `paused_${Date.now()}`,
+        success: false,
+        duration: 0,
+        troubleCount: 0,
+        shouldRetry: false,
+        retryReason: "System paused due to consecutive failures",
+        failedPhase: undefined,
+      };
     }
 
     this.isRunning = true;
@@ -77,6 +96,7 @@ export class Orchestrator {
 
     // Initialize trouble collector
     troubleCollector.setCycleId(context.cycleId);
+    await troubleCollector.loadRecentTroubles(); // 重複チェック用キャッシュをロード
     context.troubles = [];
 
     logger.info("Starting improvement cycle", {
@@ -205,15 +225,42 @@ export class Orchestrator {
 
     // CycleResult を構築して返す
     const troubleCount = context.troubles?.length || 0;
-    const shouldRetry = this.shouldRetryImmediately(context);
+    const cycleSuccess = !this.hasCriticalFailure;
+
+    // 連続失敗カウンターの更新
+    if (cycleSuccess) {
+      this.consecutiveCycleFailures = 0;
+      logger.debug("Cycle succeeded, consecutive failure counter reset");
+    } else {
+      this.consecutiveCycleFailures++;
+      logger.warn("Cycle failed, consecutive failures increased", {
+        consecutiveFailures: this.consecutiveCycleFailures,
+        maxAllowed: this.MAX_CONSECUTIVE_FAILURES,
+      });
+
+      // 5回連続失敗でシステム一時停止
+      if (this.consecutiveCycleFailures >= this.MAX_CONSECUTIVE_FAILURES) {
+        this.systemPaused = true;
+        logger.error("System paused due to consecutive failures", {
+          consecutiveFailures: this.consecutiveCycleFailures,
+        });
+        await eventBus.emit({
+          type: "error",
+          error: `System paused after ${this.consecutiveCycleFailures} consecutive failures`,
+          context: { cycleId: context.cycleId },
+        });
+      }
+    }
+
+    const shouldRetry = cycleSuccess ? false : this.shouldRetryImmediately(context);
     const retryReason = this.getRetryReason(context);
 
     return {
       cycleId: context.cycleId,
-      success: !this.hasCriticalFailure,
+      success: cycleSuccess,
       duration: Date.now() - context.startTime.getTime(),
       troubleCount,
-      shouldRetry,
+      shouldRetry: shouldRetry && !this.systemPaused, // 一時停止中はリトライしない
       retryReason,
       failedPhase: this.lastFailedPhase || undefined,
     };
@@ -404,12 +451,37 @@ export class Orchestrator {
     isRunning: boolean;
     currentCycleId?: string;
     phases: string[];
+    consecutiveFailures: number;
+    systemPaused: boolean;
   } {
     return {
       isRunning: this.isRunning,
       currentCycleId: this.currentContext?.cycleId,
       phases: this.phases.map((p) => p.name),
+      consecutiveFailures: this.consecutiveCycleFailures,
+      systemPaused: this.systemPaused,
     };
+  }
+
+  /**
+   * システム一時停止を解除
+   */
+  resumeSystem(): void {
+    if (!this.systemPaused) {
+      logger.info("System is not paused");
+      return;
+    }
+    this.systemPaused = false;
+    this.consecutiveCycleFailures = 0;
+    logger.info("System resumed, consecutive failure counter reset");
+  }
+
+  /**
+   * 連続失敗カウンターをリセット（テスト用）
+   */
+  resetFailureCounter(): void {
+    this.consecutiveCycleFailures = 0;
+    this.systemPaused = false;
   }
 }
 

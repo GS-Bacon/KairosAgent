@@ -11,7 +11,11 @@ export * from "./types.js";
 export { PatternRepository, patternRepository } from "./pattern-repository.js";
 export { RuleEngine, ruleEngine } from "./rule-engine.js";
 export { AIAnalyzer, aiAnalyzer } from "./ai-analyzer.js";
-export { PatternExtractor, patternExtractor } from "./pattern-extractor.js";
+export {
+  PatternExtractor,
+  patternExtractor,
+  FailurePattern,
+} from "./pattern-extractor.js";
 
 // 初期化ヘルパー
 import { patternRepository } from "./pattern-repository.js";

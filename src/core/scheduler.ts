@@ -8,6 +8,7 @@ export interface RetryState {
   consecutiveFailures: number;   // 連続失敗回数
   maxRetries: number;            // 上限（デフォルト: 3）
   lastFailureReason?: string;    // 前回の失敗理由
+  lastErrorCategory?: string;    // 前回のエラーカテゴリ
   cooldownUntil?: Date;          // クールダウン終了時刻
 }
 
@@ -105,6 +106,35 @@ export class Scheduler {
   }
 
   /**
+   * エラーカテゴリを抽出
+   * 異なるメッセージでも根本原因が同じ場合を識別
+   */
+  private extractErrorCategory(reason: string | undefined): string {
+    if (!reason) return "unknown";
+
+    // カテゴリパターンのマッチング
+    const patterns: [RegExp, string][] = [
+      [/build\s*fail|compilation\s*error|tsc\s*error/i, "build-error"],
+      [/test\s*fail|assertion\s*error|expect/i, "test-failure"],
+      [/type\s*error|ts\d{4}/i, "type-error"],
+      [/syntax\s*error|unexpected\s*token/i, "syntax-error"],
+      [/module\s*not\s*found|cannot\s*find\s*module/i, "dependency-error"],
+      [/timeout|timed?\s*out/i, "timeout"],
+      [/rate\s*limit|429|too\s*many\s*requests/i, "rate-limit"],
+      [/network|connection|econnrefused/i, "network-error"],
+      [/permission|eacces|forbidden/i, "permission-error"],
+    ];
+
+    for (const [pattern, category] of patterns) {
+      if (pattern.test(reason)) {
+        return category;
+      }
+    }
+
+    return "unknown";
+  }
+
+  /**
    * サイクル結果に基づいて即時再実行を処理
    */
   private async handleCycleResult(task: ScheduledTask, result: CycleResult): Promise<void> {
@@ -112,6 +142,7 @@ export class Scheduler {
       // 成功時はリトライ状態をリセット
       this.retryState.consecutiveFailures = 0;
       this.retryState.lastFailureReason = undefined;
+      this.retryState.lastErrorCategory = undefined;
       logger.debug("Cycle succeeded, retry state reset");
       return;
     }
@@ -122,10 +153,28 @@ export class Scheduler {
       return;
     }
 
+    // エラーカテゴリを抽出
+    const currentCategory = this.extractErrorCategory(result.retryReason);
+
     // 同じ理由で連続失敗している場合は即座にクールダウン
     if (this.retryState.lastFailureReason === result.retryReason) {
       logger.warn("Same failure reason repeated, entering cooldown immediately", {
         reason: result.retryReason,
+      });
+      this.enterCooldown();
+      return;
+    }
+
+    // 同じエラーカテゴリで連続失敗している場合も即座にクールダウン
+    if (
+      this.retryState.lastErrorCategory &&
+      this.retryState.lastErrorCategory === currentCategory &&
+      currentCategory !== "unknown"
+    ) {
+      logger.warn("Same error category repeated, entering cooldown immediately", {
+        category: currentCategory,
+        previousReason: this.retryState.lastFailureReason,
+        currentReason: result.retryReason,
       });
       this.enterCooldown();
       return;
@@ -140,18 +189,34 @@ export class Scheduler {
     // 即時再実行をスケジュール
     this.retryState.consecutiveFailures++;
     this.retryState.lastFailureReason = result.retryReason;
+    this.retryState.lastErrorCategory = currentCategory;
 
-    logger.info("Scheduling immediate retry", {
+    // Exponential backoff: 5秒 × 2^(failures-1)、最大30分
+    const backoffMs = this.calculateBackoff(this.retryState.consecutiveFailures);
+
+    logger.info("Scheduling immediate retry with backoff", {
       reason: result.retryReason,
+      category: currentCategory,
       consecutiveFailures: this.retryState.consecutiveFailures,
       maxRetries: this.retryState.maxRetries,
+      backoffMs,
     });
 
-    // 5秒後に再実行（連続実行を避けるため少し待つ）
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       this.runTask(task);
-    }, 5000);
+    }, backoffMs);
+  }
+
+  /**
+   * Exponential backoff を計算
+   * 5秒 × 2^(failures-1)、最大30分
+   */
+  private calculateBackoff(failures: number): number {
+    const baseMs = 5000; // 5秒
+    const maxMs = 30 * 60 * 1000; // 30分
+    const backoff = baseMs * Math.pow(2, failures - 1);
+    return Math.min(backoff, maxMs);
   }
 
   /**
@@ -254,6 +319,9 @@ export class Scheduler {
     this.retryState = {
       consecutiveFailures: 0,
       maxRetries: 3,
+      lastFailureReason: undefined,
+      lastErrorCategory: undefined,
+      cooldownUntil: undefined,
     };
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);

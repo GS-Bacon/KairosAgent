@@ -1,6 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, copyFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync, rmdirSync, rmSync } from "fs";
 import { join, relative, dirname } from "path";
 import { logger } from "../core/logger.js";
+
+export interface SnapshotStatus {
+  count: number;
+  maxSnapshots: number;
+  isOverLimit: boolean;
+  oldestSnapshot?: string;
+  newestSnapshot?: string;
+}
 
 export interface Snapshot {
   id: string;
@@ -24,7 +32,7 @@ export class SnapshotManager {
   constructor(
     snapshotDir: string = "./workspace/snapshots",
     srcDir: string = "./src",
-    maxSnapshots: number = 10
+    maxSnapshots: number = 20
   ) {
     this.snapshotDir = snapshotDir;
     this.srcDir = srcDir;
@@ -185,10 +193,94 @@ export class SnapshotManager {
       if (stat.isDirectory()) {
         this.deleteDir(fullPath);
       } else {
-        writeFileSync(fullPath, ""); // Clear content first
-        // Note: In production, use fs.unlinkSync
+        unlinkSync(fullPath);
       }
     }
+    rmdirSync(dir);
+  }
+
+  /**
+   * スナップショット数と状態を取得
+   */
+  getStatus(): SnapshotStatus {
+    const snapshots = this.list();
+    const count = snapshots.length;
+
+    return {
+      count,
+      maxSnapshots: this.maxSnapshots,
+      isOverLimit: count > this.maxSnapshots,
+      oldestSnapshot: snapshots[snapshots.length - 1]?.id,
+      newestSnapshot: snapshots[0]?.id,
+    };
+  }
+
+  /**
+   * 強制クリーンアップ（通常の削除が失敗した場合のフォールバック）
+   */
+  forceCleanup(): { success: boolean; deleted: number; errors: string[] } {
+    const snapshots = this.list();
+    const errors: string[] = [];
+    let deleted = 0;
+
+    if (snapshots.length <= this.maxSnapshots) {
+      return { success: true, deleted: 0, errors: [] };
+    }
+
+    const toDelete = snapshots.slice(this.maxSnapshots);
+
+    for (const snap of toDelete) {
+      const snapshotPath = join(this.snapshotDir, snap.id);
+
+      try {
+        this.deleteDir(snapshotPath);
+        deleted++;
+        logger.info("Force deleted snapshot", { id: snap.id });
+      } catch (err1) {
+        try {
+          rmSync(snapshotPath, { recursive: true, force: true });
+          deleted++;
+          logger.info("Force deleted snapshot (rmSync fallback)", { id: snap.id });
+        } catch (err2) {
+          const errorMsg = `Failed to delete ${snap.id}: ${err2 instanceof Error ? err2.message : String(err2)}`;
+          errors.push(errorMsg);
+          logger.error("Force cleanup failed for snapshot", {
+            id: snap.id,
+            error: errorMsg,
+          });
+        }
+      }
+    }
+
+    const success = errors.length === 0;
+    if (success) {
+      logger.info("Force cleanup completed", { deleted });
+    } else {
+      logger.warn("Force cleanup completed with errors", { deleted, errors });
+    }
+
+    return { success, deleted, errors };
+  }
+
+  /**
+   * 全てのスナップショットを削除（緊急用）
+   */
+  clearAll(): { success: boolean; deleted: number; errors: string[] } {
+    const snapshots = this.list();
+    const errors: string[] = [];
+    let deleted = 0;
+
+    for (const snap of snapshots) {
+      const snapshotPath = join(this.snapshotDir, snap.id);
+      try {
+        rmSync(snapshotPath, { recursive: true, force: true });
+        deleted++;
+      } catch (err) {
+        errors.push(`${snap.id}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return { success: errors.length === 0, deleted, errors };
   }
 }
 

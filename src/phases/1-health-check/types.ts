@@ -9,4 +9,6 @@ export interface HealthCheck {
   status: "pass" | "fail" | "warn";
   message?: string;
   duration?: number;
+  repairAttempted?: boolean;
+  repairSuccess?: boolean;
 }

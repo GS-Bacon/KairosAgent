@@ -6,7 +6,7 @@ import { HealthChecker } from "../phases/1-health-check/index.js";
 import { snapshotManager } from "../safety/snapshot.js";
 import { rollbackManager } from "../safety/rollback.js";
 import { guard } from "../safety/guard.js";
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { goalManager } from "../goals/index.js";
 import { join } from "path";
 import {
@@ -65,10 +65,10 @@ eventBus.onAll((event: KairosEvent) => {
 router.get("/status", (_req: Request, res: Response) => {
   const status = orchestrator.getStatus();
   const now = Date.now();
-  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
   const recentHistory = history.filter(
-    (h) => new Date(h.timestamp).getTime() > sevenDaysAgo
+    (h) => new Date(h.timestamp).getTime() > thirtyDaysAgo
   );
 
   const healthMonitor = getHealthMonitor();
@@ -97,9 +97,9 @@ router.get("/status", (_req: Request, res: Response) => {
     state: hasCriticalAlerts ? "critical" : status.isRunning ? "running" : "idle",
     uptime_seconds: Math.floor((now - startTime) / 1000),
     stats: {
-      modifications_7d: recentHistory.filter((h) => h.type === "modification").length,
-      rollbacks_7d: recentHistory.filter((h) => h.type === "rollback").length,
-      errors_7d: recentHistory.filter((h) => h.type === "error").length,
+      modifications_30d: recentHistory.filter((h) => h.type === "modification").length,
+      rollbacks_30d: recentHistory.filter((h) => h.type === "rollback").length,
+      errors_30d: recentHistory.filter((h) => h.type === "error").length,
     },
     criticalAlerts: criticalAlerts.length > 0 ? criticalAlerts : undefined,
     providerHealth: providerHealth.length > 0 ? providerHealth : undefined,
@@ -125,38 +125,77 @@ router.get("/health", async (_req: Request, res: Response) => {
   res.status(httpStatus).json(response);
 });
 
+// ログキャッシュ（ファイル変更時のみ再読込）
+type LogEntry = { timestamp: string; level: string; message: string };
+let logsCache: { entries: LogEntry[]; mtimes: Map<string, number> } | null = null;
+
+function parseLogFiles(logDir: string): { entries: LogEntry[]; mtimes: Map<string, number> } {
+  const entries: LogEntry[] = [];
+  const mtimes = new Map<string, number>();
+
+  if (!existsSync(logDir)) return { entries, mtimes };
+
+  const files = readdirSync(logDir)
+    .filter((f) => f.endsWith(".log"))
+    .sort()
+    .reverse()
+    .slice(0, 7);
+
+  for (const file of files) {
+    const filePath = join(logDir, file);
+    const stat = statSync(filePath);
+    mtimes.set(file, stat.mtimeMs);
+
+    const content = readFileSync(filePath, "utf-8");
+    const lines = content.split("\n").filter((l) => l.trim());
+
+    for (const line of lines) {
+      const match = line.match(/\[(.+?)\]\s*\[(\w+)\]\s*(.+)/);
+      if (match) {
+        entries.push({
+          timestamp: match[1],
+          level: match[2],
+          message: match[3],
+        });
+      }
+    }
+  }
+
+  return { entries, mtimes };
+}
+
+function isCacheValid(logDir: string): boolean {
+  if (!logsCache) return false;
+  if (!existsSync(logDir)) return logsCache.entries.length === 0;
+
+  const files = readdirSync(logDir)
+    .filter((f) => f.endsWith(".log"))
+    .sort()
+    .reverse()
+    .slice(0, 7);
+
+  if (files.length !== logsCache.mtimes.size) return false;
+
+  for (const file of files) {
+    const filePath = join(logDir, file);
+    const stat = statSync(filePath);
+    const cachedMtime = logsCache.mtimes.get(file);
+    if (!cachedMtime || cachedMtime !== stat.mtimeMs) return false;
+  }
+
+  return true;
+}
+
 router.get("/logs", (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
   const logDir = "./workspace/logs";
 
-  const logs: Array<{ timestamp: string; level: string; message: string }> = [];
-
-  if (existsSync(logDir)) {
-    const files = readdirSync(logDir)
-      .filter((f) => f.endsWith(".log"))
-      .sort()
-      .reverse()
-      .slice(0, 7);
-
-    for (const file of files) {
-      const content = readFileSync(join(logDir, file), "utf-8");
-      const lines = content.split("\n").filter((l) => l.trim());
-
-      for (const line of lines) {
-        const match = line.match(/\[(.+?)\]\s*\[(\w+)\]\s*(.+)/);
-        if (match) {
-          logs.push({
-            timestamp: match[1],
-            level: match[2],
-            message: match[3],
-          });
-        }
-      }
-    }
+  if (!isCacheValid(logDir)) {
+    logsCache = parseLogFiles(logDir);
   }
 
-  logs.reverse();
+  const logs = [...logsCache!.entries].reverse();
   const start = (page - 1) * limit;
   const paginated = logs.slice(start, start + limit);
 
@@ -273,16 +312,35 @@ router.put("/config", (req: Request, res: Response) => {
   res.json({ success: true, message: "Configuration updated" });
 });
 
-router.get("/snapshots", (_req: Request, res: Response) => {
-  const snapshots = snapshotManager.list();
-  res.json(snapshots);
+router.get("/snapshots", (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const snapshots = snapshotManager.list().slice(0, limit);
+  res.json({
+    count: snapshots.length,
+    data: snapshots,
+  });
 });
 
-router.get("/rollbacks", (_req: Request, res: Response) => {
-  const rollbacks = rollbackManager.getHistory();
-  res.json(rollbacks);
+router.get("/rollbacks", (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const rollbacks = rollbackManager.getHistory().slice(0, limit);
+  res.json({
+    count: rollbacks.length,
+    data: rollbacks,
+  });
 });
 
+// イベント履歴取得（JSON）- SSEとは別に過去イベントを取得
+router.get("/events/history", (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+  const events = history.slice(-limit);
+  res.json({
+    count: events.length,
+    data: events,
+  });
+});
+
+// SSEストリーミング
 router.get("/events", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
