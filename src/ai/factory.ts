@@ -1,10 +1,12 @@
 import { AIProvider } from "./provider.js";
 import { ClaudeProvider } from "./claude-provider.js";
 import { GLMProvider } from "./glm-provider.js";
+import { OpenCodeProvider } from "./opencode-provider.js";
+import { HybridProvider } from "./hybrid-provider.js";
 import { logger } from "../core/logger.js";
 
 export interface AIConfig {
-  provider: "claude" | "glm";
+  provider: "claude" | "glm" | "opencode" | "hybrid";
   claude?: {
     model?: string;
   };
@@ -29,6 +31,14 @@ export function createAIProvider(config: AIConfig): AIProvider {
       }
       logger.info("Creating GLM provider");
       return new GLMProvider(config.glm);
+
+    case "opencode":
+      logger.info("Creating OpenCode provider");
+      return new OpenCodeProvider();
+
+    case "hybrid":
+      logger.info("Creating Hybrid provider (Claude + OpenCode)");
+      return new HybridProvider();
 
     default:
       throw new Error(`Unknown provider: ${config.provider}`);

@@ -1,6 +1,9 @@
 import { logger } from "./logger.js";
 import { eventBus } from "./event-bus.js";
 import { Phase, CycleContext, createCycleContext } from "../phases/types.js";
+import { goalManager } from "../goals/index.js";
+import { getAIProvider } from "../ai/factory.js";
+import { HybridProvider, PhaseName } from "../ai/hybrid-provider.js";
 
 import { HealthCheckPhase } from "../phases/1-health-check/index.js";
 import { ErrorDetectPhase } from "../phases/2-error-detect/index.js";
@@ -39,12 +42,30 @@ export class Orchestrator {
     const context = createCycleContext();
     this.currentContext = context;
 
-    logger.info("Starting improvement cycle", { cycleId: context.cycleId });
+    // Load active goals into context
+    context.activeGoals = goalManager.getActiveGoals();
+    context.goalProgress = [];
+
+    logger.info("Starting improvement cycle", {
+      cycleId: context.cycleId,
+      activeGoals: context.activeGoals.length,
+    });
     await eventBus.emit({ type: "cycle_started", timestamp: context.startTime });
 
     try {
       for (const phase of this.phases) {
         logger.info(`Executing phase: ${phase.name}`);
+
+        // Set current phase on hybrid provider if in use
+        try {
+          const provider = getAIProvider();
+          if (provider instanceof HybridProvider) {
+            provider.setCurrentPhase(phase.name as PhaseName);
+          }
+        } catch {
+          // Provider not yet initialized, skip
+        }
+
         await eventBus.emit({
           type: "phase_started",
           phase: phase.name,
@@ -80,6 +101,19 @@ export class Orchestrator {
     } finally {
       this.isRunning = false;
       const duration = Date.now() - context.startTime.getTime();
+
+      // Record goal progress if any
+      if (context.goalProgress && context.goalProgress.length > 0) {
+        for (const progress of context.goalProgress) {
+          goalManager.recordProgress(
+            progress.goalId,
+            context.cycleId,
+            progress.metricUpdates,
+            progress.notes
+          );
+        }
+      }
+
       await eventBus.emit({
         type: "cycle_completed",
         timestamp: new Date(),

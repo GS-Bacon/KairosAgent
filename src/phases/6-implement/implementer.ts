@@ -99,7 +99,16 @@ export class CodeImplementer {
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
-        logger.warn("Generated code has warnings", { warnings: contentValidation.warnings });
+        logger.error("Generated code blocked: dangerous patterns detected", {
+          file: filePath,
+          warnings: contentValidation.warnings,
+        });
+        return {
+          file: filePath,
+          changeType: "create",
+          success: false,
+          error: `Dangerous code detected: ${contentValidation.warnings.join(", ")}`,
+        };
       }
 
       const dir = dirname(filePath);
@@ -146,7 +155,17 @@ export class CodeImplementer {
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
-        logger.warn("Modified code has warnings", { warnings: contentValidation.warnings });
+        logger.error("Modified code blocked: dangerous patterns detected", {
+          file: filePath,
+          warnings: contentValidation.warnings,
+        });
+        return {
+          file: filePath,
+          changeType: "modify",
+          originalContent,
+          success: false,
+          error: `Dangerous code detected: ${contentValidation.warnings.join(", ")}`,
+        };
       }
 
       writeFileSync(filePath, newContent);

@@ -1,6 +1,7 @@
 import { Phase, PhaseResult, CycleContext, Improvement } from "../types.js";
 import { ImprovementFinder } from "./finder.js";
 import { logger } from "../../core/logger.js";
+import { toolTracker } from "../../tools/index.js";
 
 export class ImproveFindPhase implements Phase {
   name = "improve-find";
@@ -39,6 +40,20 @@ export class ImproveFindPhase implements Phase {
           priority: issue.severity,
         });
       }
+    }
+
+    // Add tool recommendations as improvements
+    const toolSuggestions = toolTracker.suggestTools();
+    for (const suggestion of toolSuggestions) {
+      context.improvements.push({
+        id: `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type: "tool-adoption",
+        description: `Adopt ${suggestion.toolName}: ${suggestion.reason}${
+          suggestion.installCommand ? ` (${suggestion.installCommand})` : ""
+        }`,
+        file: "package.json",
+        priority: suggestion.priority,
+      });
     }
 
     const totalIssues = context.issues.length;

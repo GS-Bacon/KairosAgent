@@ -1,3 +1,5 @@
+import { Goal, GoalProgress } from "../goals/types.js";
+
 export interface Issue {
   id: string;
   type: "error" | "warning" | "critical";
@@ -10,7 +12,7 @@ export interface Issue {
 
 export interface Improvement {
   id: string;
-  type: "todo" | "fixme" | "optimization" | "refactor" | "security";
+  type: "todo" | "fixme" | "optimization" | "refactor" | "security" | "tool-adoption";
   description: string;
   file: string;
   line?: number;
@@ -68,6 +70,8 @@ export interface CycleContext {
     failedTests: number;
     errors: string[];
   };
+  activeGoals?: Goal[];
+  goalProgress?: GoalProgress[];
 }
 
 export interface Phase {
