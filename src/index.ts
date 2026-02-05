@@ -1,6 +1,7 @@
 import { logger } from "./core/logger.js";
 import { scheduler } from "./core/scheduler.js";
 import { orchestrator } from "./core/orchestrator.js";
+import { dailyReporter } from "./core/daily-reporter.js";
 import { APIServer } from "./api/server.js";
 import { initializeAI, AIConfig } from "./ai/factory.js";
 import { guard } from "./safety/guard.js";
@@ -49,7 +50,7 @@ interface KairosConfig {
 
 const DEFAULT_CONFIG: KairosConfig = {
   port: 3100,
-  checkInterval: 30 * 60 * 1000, // 30 minutes
+  checkInterval: 5 * 60 * 1000, // 5 minutes
   ai: {
     provider: "claude",
   },
@@ -175,6 +176,41 @@ async function main(): Promise<void> {
       }
     }
   );
+
+  // Register daily report task (run at 23:55 daily)
+  // Calculate interval to run at 23:55 every day
+  const calculateTimeUntil2355 = (): number => {
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(23, 55, 0, 0);
+    if (target.getTime() <= now.getTime()) {
+      // Already past 23:55 today, schedule for tomorrow
+      target.setDate(target.getDate() + 1);
+    }
+    return target.getTime() - now.getTime();
+  };
+
+  // Schedule daily report generation
+  const scheduleDailyReport = (): void => {
+    const delay = calculateTimeUntil2355();
+    setTimeout(async () => {
+      try {
+        logger.info("Generating daily report");
+        await dailyReporter.generate();
+      } catch (err) {
+        logger.error("Daily report generation failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // Schedule next day's report
+      scheduleDailyReport();
+    }, delay);
+    logger.info("Daily report scheduled", {
+      nextRunIn: `${Math.round(delay / 1000 / 60)} minutes`,
+    });
+  };
+
+  scheduleDailyReport();
 
   // Start scheduler
   scheduler.start();

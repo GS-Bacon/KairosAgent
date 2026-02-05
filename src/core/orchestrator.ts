@@ -6,6 +6,8 @@ import { getAIProvider } from "../ai/factory.js";
 import { HybridProvider, PhaseName } from "../ai/hybrid-provider.js";
 import { tokenTracker } from "../ai/token-tracker.js";
 import { ClaudeProvider } from "../ai/claude-provider.js";
+import { workDetector } from "./work-detector.js";
+import { cycleLogger } from "./cycle-logger.js";
 
 import { HealthCheckPhase } from "../phases/1-health-check/index.js";
 import { ErrorDetectPhase } from "../phases/2-error-detect/index.js";
@@ -75,8 +77,31 @@ export class Orchestrator {
         shouldRetry: false,
         retryReason: "System paused due to consecutive failures",
         failedPhase: undefined,
+        skippedEarly: false,
       };
     }
+
+    // 軽量チェック: 作業があるかどうかを判定
+    const workDetectionResult = await workDetector.detect();
+    if (!workDetectionResult.hasWork) {
+      logger.info("No work detected, skipping cycle", {
+        checkDuration: workDetectionResult.checkDuration,
+      });
+      return {
+        cycleId: `skipped_${Date.now()}`,
+        success: true,
+        duration: workDetectionResult.checkDuration,
+        troubleCount: 0,
+        shouldRetry: false,
+        skippedEarly: true,
+      };
+    }
+
+    logger.info("Work detected, proceeding with cycle", {
+      hasBuildErrors: workDetectionResult.hasBuildErrors,
+      pendingImprovements: workDetectionResult.pendingImprovementCount,
+      activeGoals: workDetectionResult.activeGoalCount,
+    });
 
     this.isRunning = true;
     this.lastFailedPhase = null;
@@ -292,6 +317,9 @@ export class Orchestrator {
     const shouldRetry = cycleSuccess ? false : this.shouldRetryImmediately(context);
     const retryReason = this.getRetryReason(context);
 
+    // サイクルログを保存
+    cycleLogger.saveLog(context, cycleSuccess, false);
+
     return {
       cycleId: context.cycleId,
       success: cycleSuccess,
@@ -300,6 +328,7 @@ export class Orchestrator {
       shouldRetry: shouldRetry && !this.systemPaused, // 一時停止中はリトライしない
       retryReason,
       failedPhase: this.lastFailedPhase || undefined,
+      skippedEarly: false,
     };
   }
 

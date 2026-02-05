@@ -117,4 +117,5 @@ export interface CycleResult {
   shouldRetry: boolean;      // 即時再実行が必要か
   retryReason?: string;      // 再実行理由
   failedPhase?: string;      // 失敗したフェーズ名
+  skippedEarly?: boolean;    // 作業がなく早期終了したか
 }
