@@ -14,8 +14,8 @@ export { AIAnalyzer, aiAnalyzer } from "./ai-analyzer.js";
 export {
   PatternExtractor,
   patternExtractor,
-  FailurePattern,
 } from "./pattern-extractor.js";
+export type { FailurePattern } from "./pattern-extractor.js";
 
 // 初期化ヘルパー
 import { patternRepository } from "./pattern-repository.js";
