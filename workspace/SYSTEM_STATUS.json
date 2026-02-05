@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-02-05T02:22:25.319Z",
+  "timestamp": "2026-02-05T02:24:49.237Z",
   "health": {
     "state": "degraded",
-    "uptime": 37747,
-    "lastHeartbeat": "2026-02-05T02:17:24.370Z",
+    "uptime": 37891,
+    "lastHeartbeat": "2026-02-05T02:22:25.319Z",
     "resources": {
-      "cpuPercent": 1,
-      "memoryMB": 7197.76171875,
-      "memoryPercent": 22.954633931524537,
-      "diskGB": 35.22544860839844,
-      "diskPercent": 36.636004084253436,
+      "cpuPercent": 0.9125,
+      "memoryMB": 7141.62109375,
+      "memoryPercent": 22.775593898536922,
+      "diskGB": 35.22566604614258,
+      "diskPercent": 36.63623022899814,
       "networkMbps": 0,
-      "processCount": 903
+      "processCount": 909
     },
     "tools": {
       "claudeCode": "degraded",
@@ -30,5 +30,5 @@
       ]
     }
   },
-  "uptime": 37747
+  "uptime": 37891
 }
