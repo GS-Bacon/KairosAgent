@@ -15,22 +15,11 @@ auth/
 *credentials*
 *secret*
 
-# Private workspace data
-workspace/ledger/
-workspace/audit/
-workspace/approvals/
+# Workspace data
 workspace/logs/
-workspace/PROBLEMS.jsonl
-workspace/ROOT_CAUSES.jsonl
-workspace/IMPROVEMENTS.jsonl
-workspace/SYSTEM_STATUS.json
+workspace/history/
+workspace/snapshots/
 config.json
-
-# Backups (contain sensitive data)
-backups/
-
-# Sandbox test environment
-sandbox/
 
 # IDE
 .idea/
@@ -44,7 +33,6 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
 
 # Test coverage
 coverage/
@@ -52,3 +40,7 @@ coverage/
 # Temporary files
 tmp/
 .tmp/
+
+# CLI build
+cli/dist/
+cli/node_modules/

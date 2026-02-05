@@ -1,147 +1,133 @@
-# AutoClaudeKMP
+# MoltBot
 
-AIが自律的に収益を稼ぎ、自己改善を続けるシステム
+自己改善型AIシステム - 長期間動いて自律的に自分自身のコードを修正・改善し続けます。
 
 ## 概要
 
-このプロジェクトは、AIが自律的に以下を行うシステムです：
+MoltBotは以下の特徴を持つシステムです：
 
-- 収益化方法の調査・選定・実行
-- 問題発生時の根本原因分析（5 Whys）
-- プロセスの自己改善と学習
-- 継続的な最適化
+- **自己修正**: AIが自分自身のソースコードを改善
+- **フェイルセーフ**: 変更前にスナップショット、失敗時は自動ロールバック
+- **疎結合**: コアはREST API提供のみ、UI/通知は別コンポーネント
+- **長期安定稼働**: エラーからの自動復旧
 
 ## アーキテクチャ
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                       AutoClaudeKMP                             │
-├─────────────────────────────────────────────────────────────────┤
-│  Orchestrator ──▶ Task Queue ──▶ Claude Code CLI               │
-│       │                              │                          │
-│       ▼                              ▼                          │
-│  Heartbeat (30min)           Tool System                       │
-│                              ├─ Browser (Playwright)           │
-│                              ├─ File Ops                       │
-│                              └─ Web Search                     │
-├─────────────────────────────────────────────────────────────────┤
-│  Self-Improvement     Risk Management     Resource Manager      │
-│  ├─ RCA Engine       ├─ Financial Risk   ├─ CPU/Memory Limit   │
-│  ├─ Process Improver ├─ System Risk      └─ Process Priority   │
-│  └─ Learning Cycle   └─ Boundary Guard                          │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    MoltBot Core                         │
+│  (自己改善エンジン - API提供)                            │
+│                                                         │
+│  ┌─────────┐  ┌───────────┐  ┌─────────┐              │
+│  │ 診断    │  │ 修正      │  │ 安全    │              │
+│  │ Engine  │→ │ Engine    │→ │ Guard   │              │
+│  └─────────┘  └───────────┘  └─────────┘              │
+│                      │                                  │
+│              ┌───────┴───────┐                         │
+│              │   REST API    │ ← 全ての外部通信はここ経由│
+│              │   (Port 3100) │                         │
+│              └───────────────┘                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+## 改善サイクル（8フェーズ）
+
+```
+Phase 1: health-check  → システム正常性確認
+Phase 2: error-detect  → ログ/ビルドエラー検出
+Phase 3: improve-find  → TODO/FIXME、品質問題検出
+Phase 4: search        → 関連コード調査
+Phase 5: plan          → 修正計画作成
+Phase 6: implement     → スナップショット→コード生成
+Phase 7: test-gen      → テスト自動生成
+Phase 8: verify        → テスト実行→成功:コミット/失敗:ロールバック
 ```
 
 ## セットアップ
 
-### 1. 依存関係のインストール
+### インストール
 
 ```bash
-pnpm install
+npm install
+npm run build
 ```
 
-### 2. ビルド
+### 設定
 
 ```bash
-pnpm build
+# config.json を編集
+{
+  "port": 3100,
+  "checkInterval": 1800000,  // 30分
+  "ai": {
+    "provider": "claude"  // or "glm"
+  }
+}
 ```
 
-### 3. 設定
+### 起動
 
 ```bash
-cp config.json.example config.json
-# config.json を編集してDiscord Webhook URLなどを設定
+npm start
 ```
 
-### 4. 起動
+## REST API
 
-#### 直接起動
+| Endpoint | Method | 説明 |
+|----------|--------|------|
+| `/api/status` | GET | システム状態 |
+| `/api/health` | GET | ヘルスチェック |
+| `/api/logs` | GET | ログ取得 |
+| `/api/history` | GET | 変更履歴 |
+| `/api/events` | GET | SSE (リアルタイム) |
+| `/api/trigger/check` | POST | 手動チェック実行 |
+| `/api/trigger/repair` | POST | 手動修正実行 |
+| `/api/config` | GET/PUT | 設定 |
+
+## CLI
 
 ```bash
-pnpm start
+cd cli
+npm install
+npm run build
+npm link
+
+moltbot status          # システム状態
+moltbot health          # ヘルスチェック
+moltbot logs            # ログ表示
+moltbot history         # 変更履歴
+moltbot check           # チェック実行
+moltbot watch           # リアルタイム監視
 ```
 
-#### systemdサービスとして
-
-```bash
-sudo cp systemd/auto-claude.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable auto-claude
-sudo systemctl start auto-claude
-```
-
-## ダッシュボード
-
-```bash
-pnpm dashboard
-```
-
-または systemd:
-
-```bash
-sudo cp systemd/auto-claude-dashboard.service /etc/systemd/system/
-sudo systemctl enable auto-claude-dashboard
-sudo systemctl start auto-claude-dashboard
-```
-
-アクセス: http://localhost:3000 (Tailscale経由でも可能)
-
-## プロジェクト構造
+## ディレクトリ構造
 
 ```
-/home/bacon/AutoClaudeKMP/
-├── apps/
-│   ├── orchestrator/    # メインプロセス
-│   └── dashboard/       # Webダッシュボード
-├── packages/
-│   ├── core/           # 共通型・ユーティリティ
-│   ├── safety/         # 安全機構
-│   ├── backup/         # バックアップ
-│   ├── audit/          # 監査ログ
-│   ├── notification/   # Discord通知
-│   ├── memory/         # メモリ管理
-│   ├── ledger/         # 収支管理
-│   ├── ai-router/      # Claude CLI連携
-│   ├── self-improve/   # 自己改善エンジン
-│   ├── strategies/     # 戦略管理
-│   ├── compliance/     # 法的コンプライアンス
-│   ├── github/         # GitHub管理
-│   ├── sandbox/        # テスト環境
-│   └── browser/        # ブラウザ自動化
-└── workspace/          # 作業ディレクトリ
+MoltBot/
+├── src/
+│   ├── index.ts              # エントリーポイント
+│   ├── core/                 # コア機能
+│   │   ├── orchestrator.ts   # フェーズ制御
+│   │   ├── scheduler.ts      # 定期実行
+│   │   ├── logger.ts         # ロギング
+│   │   └── event-bus.ts      # イベント管理
+│   ├── phases/               # 8つのフェーズ
+│   ├── ai/                   # AIプロバイダー
+│   ├── safety/               # 安全機構
+│   └── api/                  # REST API
+├── cli/                      # CLIクライアント
+├── workspace/                # 作業ディレクトリ
+└── tests/                    # テスト
 ```
 
-## ドキュメント
+## 安全機構
 
-詳細なシステムワークフローは以下を参照してください：
-
-- [システムワークフロー](./docs/WORKFLOWS.md) - 全処理フローのMermaid図解
-
-### 主要ワークフロー
-
-| フロー | 説明 |
-|---|---|
-| 起動フロー | システム起動からIDLE状態まで |
-| ハートビート | 30分ごとの健全性チェック |
-| 学習サイクル | 問題登録から改善実装まで |
-| 提案システム | ユーザー提案の処理フロー |
-| 戦略実行 | 収益化戦略の管理・実行 |
-
-## 制約
-
-- 損失上限: ¥30,000（レバレッジ取引禁止）
-- 稼いだ金の再投資は許可
-- VM外操作は必ずDiscord承認
-
-## 目標
-
-| 期間 | 目標 |
-|------|------|
-| 1ヶ月 | ¥2,000 |
-| 3ヶ月 | ¥5,000/月 |
-| 6ヶ月 | ¥10,000/月 |
-| 1年 | サブスク代+電気代を自給 |
+1. **スナップショット**: 修正前にコード全体を保存
+2. **変更制限**: 1回の修正で変更できるファイル数を制限
+3. **禁止パターン**: 安全機構自体は修正禁止
+4. **テスト必須**: 修正後は必ずテスト実行
+5. **自動ロールバック**: テスト失敗時は自動で戻す
 
 ## ライセンス
 
-Private - All rights reserved
+MIT

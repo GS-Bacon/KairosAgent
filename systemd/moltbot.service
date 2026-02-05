@@ -1,0 +1,23 @@
+[Unit]
+Description=MoltBot Self-Improving AI System
+After=network.target
+
+[Service]
+Type=simple
+User=bacon
+WorkingDirectory=/home/bacon/AutoClaudeKMP
+ExecStart=/usr/bin/node /home/bacon/AutoClaudeKMP/dist/index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=NODE_ENV=production
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target
