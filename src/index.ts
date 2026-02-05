@@ -3,6 +3,7 @@ import { scheduler } from "./core/scheduler.js";
 import { orchestrator } from "./core/orchestrator.js";
 import { APIServer } from "./api/server.js";
 import { initializeAI, AIConfig } from "./ai/factory.js";
+import { guard } from "./safety/guard.js";
 import { existsSync, readFileSync, mkdirSync } from "fs";
 
 interface KairosConfig {
@@ -56,6 +57,16 @@ async function main(): Promise<void> {
     logger.info("AI provider initialized");
   } catch (err) {
     logger.warn("AI provider initialization failed, will retry on use", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Initialize Guard AI providers for security review
+  try {
+    guard.initializeAIProviders();
+    logger.info("Guard AI providers initialized");
+  } catch (err) {
+    logger.warn("Guard AI providers initialization failed", {
       error: err instanceof Error ? err.message : String(err),
     });
   }

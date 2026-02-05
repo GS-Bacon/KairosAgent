@@ -333,4 +333,21 @@ router.post("/goals/:id/reactivate", (req: Request, res: Response) => {
   res.json({ success: true, message: "Goal reactivated" });
 });
 
+// AI Security Review Stats
+router.get("/security/review-stats", (_req: Request, res: Response) => {
+  const stats = guard.getReviewStats();
+  res.json({
+    totalReviews: stats.total,
+    openCodeTrustScore: stats.openCodeTrust,
+    openCodeReady: stats.openCodeTrust >= 0.8,
+    recentReviews: stats.recentReviews.map((r) => ({
+      timestamp: r.timestamp,
+      warnings: r.warnings,
+      claudeApproved: r.claudeVerdict?.approved,
+      openCodeApproved: r.openCodeVerdict?.approved,
+      finalDecision: r.finalDecision,
+    })),
+  });
+});
+
 export { router };
