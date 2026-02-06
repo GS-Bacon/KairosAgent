@@ -75,3 +75,79 @@ export interface ConfigResponse {
     protectedPatterns: string[];
   };
 }
+
+export interface MarkdownLogFile {
+  filename: string;
+  date: string;
+  topic: string;
+  path: string;
+  size: number;
+  mtime: string;
+}
+
+export interface MarkdownLogListResponse {
+  count: number;
+  data: MarkdownLogFile[];
+}
+
+export interface MarkdownLogContentResponse {
+  filename: string;
+  content: string;
+  size: number;
+  mtime: string;
+}
+
+// Cycle types
+export interface CycleIssue {
+  type: "error" | "warn" | "info";
+  message: string;
+  context?: string;
+}
+
+export interface CycleChange {
+  file: string;
+  changeType: "create" | "modify" | "delete";
+}
+
+export interface CycleTrouble {
+  type: string;
+  message: string;
+}
+
+export interface CycleSummary {
+  cycleId: string;
+  filename: string;
+  date: string;
+  startTime: string;
+  endTime?: string;
+  duration: number;
+  success: boolean;
+  issueCount: number;
+  changeCount: number;
+  troubleCount: number;
+  cycleType?: "repair" | "research";  // サイクルの種類
+  researchTopic?: string;             // リサーチの場合のトピック
+  findingsCount?: number;             // リサーチの場合の発見数
+  approachesCount?: number;           // リサーチの場合のアプローチ数
+}
+
+export interface CycleDetail {
+  cycleId: string;
+  filename: string;
+  startTime: string;
+  endTime?: string;
+  duration: number;
+  success: boolean;
+  issues: CycleIssue[];
+  changes: CycleChange[];
+  troubles: CycleTrouble[];
+  tokenUsage?: { input: number; output: number };
+  rawContent: string;
+}
+
+export interface CycleListResponse {
+  count: number;
+  data: CycleSummary[];
+}
+
+export interface CycleDetailResponse extends CycleDetail {}

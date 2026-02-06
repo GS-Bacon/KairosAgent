@@ -16,6 +16,16 @@ import {
   ConfigResponse,
   CriticalAlertInfo,
   ProviderHealthInfo,
+  MarkdownLogFile,
+  MarkdownLogListResponse,
+  MarkdownLogContentResponse,
+  CycleSummary,
+  CycleDetail,
+  CycleIssue,
+  CycleChange,
+  CycleTrouble,
+  CycleListResponse,
+  CycleDetailResponse,
 } from "./types.js";
 import { getHealthMonitor } from "../ai/provider-health.js";
 import { criticalAlertManager } from "../notifications/critical-alert.js";
@@ -418,6 +428,393 @@ router.post("/goals/:id/reactivate", (req: Request, res: Response) => {
   }
   goalManager.reactivateGoal(req.params.id);
   res.json({ success: true, message: "Goal reactivated" });
+});
+
+// Markdown log files API
+const MARKDOWN_LOG_DIR = "./workspace/logs";
+
+router.get("/logs/files", (req: Request, res: Response) => {
+  const type = (req.query.type as string) || "all";
+  const dateFilter = req.query.date as string;
+
+  if (!existsSync(MARKDOWN_LOG_DIR)) {
+    const response: MarkdownLogListResponse = { count: 0, data: [] };
+    res.json(response);
+    return;
+  }
+
+  const files = readdirSync(MARKDOWN_LOG_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .map((filename) => {
+      const filePath = join(MARKDOWN_LOG_DIR, filename);
+      const stat = statSync(filePath);
+      // Parse filename: YYYY-MM-DD-<topic>.md
+      const match = filename.match(/^(\d{4}-\d{2}-\d{2})-(.+)\.md$/);
+      const date = match ? match[1] : "";
+      const topic = match ? match[2] : filename.replace(".md", "");
+
+      return {
+        filename,
+        date,
+        topic,
+        path: `/api/logs/files/${encodeURIComponent(filename)}`,
+        size: stat.size,
+        mtime: stat.mtime.toISOString(),
+      } as MarkdownLogFile;
+    })
+    .filter((f) => {
+      if (dateFilter && f.date !== dateFilter) return false;
+      if (type === "daily-report" && !f.topic.includes("daily")) return false;
+      return true;
+    })
+    .sort((a, b) => new Date(b.mtime).getTime() - new Date(a.mtime).getTime());
+
+  const response: MarkdownLogListResponse = {
+    count: files.length,
+    data: files,
+  };
+
+  res.json(response);
+});
+
+router.get("/logs/files/:filename", (req: Request, res: Response) => {
+  const filename = req.params.filename;
+
+  // Path traversal prevention
+  if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    res.status(400).json({ error: "Invalid filename" });
+    return;
+  }
+
+  if (!filename.endsWith(".md")) {
+    res.status(400).json({ error: "Only markdown files are allowed" });
+    return;
+  }
+
+  const filePath = join(MARKDOWN_LOG_DIR, filename);
+
+  // Verify the resolved path is within the log directory
+  const resolvedPath = join(process.cwd(), filePath);
+  const resolvedLogDir = join(process.cwd(), MARKDOWN_LOG_DIR);
+  if (!resolvedPath.startsWith(resolvedLogDir)) {
+    res.status(403).json({ error: "Access denied" });
+    return;
+  }
+
+  if (!existsSync(filePath)) {
+    res.status(404).json({ error: "File not found" });
+    return;
+  }
+
+  const stat = statSync(filePath);
+  const content = readFileSync(filePath, "utf-8");
+
+  const response: MarkdownLogContentResponse = {
+    filename,
+    content,
+    size: stat.size,
+    mtime: stat.mtime.toISOString(),
+  };
+
+  res.json(response);
+});
+
+// Cycle logs API
+const CYCLE_LOG_PREFIX = "cycle-";
+const RESEARCH_LOG_PREFIX = "research-";
+
+function parseCycleLogSummary(filename: string, content: string): CycleSummary | null {
+  const match = filename.match(/^(\d{4}-\d{2}-\d{2})-cycle-(\d+)\.md$/);
+  if (!match) return null;
+
+  const date = match[1];
+  const cycleId = `cycle_${match[2]}`;
+
+  // Parse summary section
+  const startTimeMatch = content.match(/\*\*Start Time\*\*:\s*(.+)/);
+  const endTimeMatch = content.match(/\*\*End Time\*\*:\s*(.+)/);
+  const durationMatch = content.match(/\*\*Duration\*\*:\s*([\d.]+)\s*seconds/);
+  const statusMatch = content.match(/\*\*Status\*\*:\s*(Success|Failure)/);
+
+  // Count issues
+  const issuesSection = content.match(/## Issues Detected[\s\S]*?(?=##|$)/);
+  const issueLines = issuesSection
+    ? (issuesSection[0].match(/^- \[/gm) || []).length
+    : 0;
+
+  // Count changes
+  const changesSection = content.match(/## Changes Made[\s\S]*?(?=##|$)/);
+  const changeLines = changesSection
+    ? (changesSection[0].match(/^- /gm) || []).length
+    : 0;
+
+  // Count troubles
+  const troublesSection = content.match(/## Troubles[\s\S]*?(?=##|$)/);
+  const troubleLines = troublesSection
+    ? (troublesSection[0].match(/^- /gm) || []).length
+    : 0;
+
+  const startTime = startTimeMatch ? startTimeMatch[1].trim() : "";
+  const endTime = endTimeMatch ? endTimeMatch[1].trim() : undefined;
+  const duration = durationMatch ? parseFloat(durationMatch[1]) : 0;
+  const success = statusMatch ? statusMatch[1] === "Success" : false;
+
+  return {
+    cycleId,
+    filename,
+    date,
+    startTime,
+    endTime,
+    duration,
+    success,
+    issueCount: issueLines,
+    changeCount: changeLines,
+    troubleCount: troubleLines,
+    cycleType: "repair",
+  };
+}
+
+/**
+ * リサーチログ（JSON）をパースしてCycleSummaryを生成
+ */
+function parseResearchLogSummary(filename: string, content: string): CycleSummary | null {
+  const match = filename.match(/^(\d{4}-\d{2}-\d{2})-research-(.+)\.json$/);
+  if (!match) return null;
+
+  try {
+    const data = JSON.parse(content);
+    const date = match[1];
+    const topicId = data.topic?.id || match[2];
+
+    // topic.idからtimestampを抽出（format: topic_goal_xxx_yyy_timestamp）
+    const timestampMatch = topicId.match(/_(\d+)$/);
+    const cycleId = timestampMatch ? `cycle_${timestampMatch[1]}` : `research_${Date.now()}`;
+
+    return {
+      cycleId,
+      filename,
+      date,
+      startTime: data.timestamp || "",
+      endTime: data.timestamp,
+      duration: 0,  // リサーチログにはduration情報がない
+      success: true,  // リサーチは完了した時点で成功
+      issueCount: 0,
+      changeCount: 0,
+      troubleCount: 0,
+      cycleType: "research",
+      researchTopic: data.topic?.topic || "Unknown",
+      findingsCount: data.findings?.length || 0,
+      approachesCount: data.approaches?.length || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseCycleLogDetail(filename: string, content: string): CycleDetail | null {
+  const summary = parseCycleLogSummary(filename, content);
+  if (!summary) return null;
+
+  // Parse issues
+  const issues: CycleIssue[] = [];
+  const issuesSection = content.match(/## Issues Detected[\s\S]*?(?=##|$)/);
+  if (issuesSection) {
+    const issueRegex = /^- \[(error|warn|info)\]\s*(.+?)(?:\s*(\{[\s\S]*?\}))?$/gm;
+    let issueMatch;
+    while ((issueMatch = issueRegex.exec(issuesSection[0])) !== null) {
+      issues.push({
+        type: issueMatch[1] as "error" | "warn" | "info",
+        message: issueMatch[2].trim(),
+        context: issueMatch[3] ? truncateContext(issueMatch[3]) : undefined,
+      });
+    }
+  }
+
+  // Parse changes
+  const changes: CycleChange[] = [];
+  const changesSection = content.match(/## Changes Made[\s\S]*?(?=##|$)/);
+  if (changesSection) {
+    const changeRegex = /^- (.+?)\s*\((create|modify|delete)\)/gm;
+    let changeMatch;
+    while ((changeMatch = changeRegex.exec(changesSection[0])) !== null) {
+      changes.push({
+        file: changeMatch[1].trim(),
+        changeType: changeMatch[2] as "create" | "modify" | "delete",
+      });
+    }
+  }
+
+  // Parse troubles
+  const troubles: CycleTrouble[] = [];
+  const troublesSection = content.match(/## Troubles[\s\S]*?(?=##|$)/);
+  if (troublesSection) {
+    const troubleRegex = /^- \[(.+?)\]\s*(.+)/gm;
+    let troubleMatch;
+    while ((troubleMatch = troubleRegex.exec(troublesSection[0])) !== null) {
+      troubles.push({
+        type: troubleMatch[1].trim(),
+        message: troubleMatch[2].trim(),
+      });
+    }
+  }
+
+  // Parse token usage
+  let tokenUsage: { input: number; output: number } | undefined;
+  const tokenMatch = content.match(/\*\*Token Usage\*\*:\s*input=(\d+),?\s*output=(\d+)/);
+  if (tokenMatch) {
+    tokenUsage = {
+      input: parseInt(tokenMatch[1], 10),
+      output: parseInt(tokenMatch[2], 10),
+    };
+  }
+
+  return {
+    cycleId: summary.cycleId,
+    filename,
+    startTime: summary.startTime,
+    endTime: summary.endTime,
+    duration: summary.duration,
+    success: summary.success,
+    issues,
+    changes,
+    troubles,
+    tokenUsage,
+    rawContent: content,
+  };
+}
+
+function truncateContext(context: string, maxLength = 200): string {
+  if (context.length <= maxLength) return context;
+  return context.substring(0, maxLength) + "...";
+}
+
+router.get("/cycles", (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+  if (!existsSync(MARKDOWN_LOG_DIR)) {
+    const response: CycleListResponse = { count: 0, data: [] };
+    res.json(response);
+    return;
+  }
+
+  const allFiles = readdirSync(MARKDOWN_LOG_DIR);
+
+  // 修復サイクルログ（.md）をパース
+  const cycleFiles = allFiles
+    .filter((f) => f.endsWith(".md") && f.includes(CYCLE_LOG_PREFIX));
+
+  const cycles: CycleSummary[] = [];
+  for (const filename of cycleFiles) {
+    const filePath = join(MARKDOWN_LOG_DIR, filename);
+    const content = readFileSync(filePath, "utf-8");
+    const summary = parseCycleLogSummary(filename, content);
+    if (summary) {
+      cycles.push(summary);
+    }
+  }
+
+  // リサーチログ（.json）をパース
+  const researchFiles = allFiles
+    .filter((f) => f.endsWith(".json") && f.includes(RESEARCH_LOG_PREFIX));
+
+  for (const filename of researchFiles) {
+    const filePath = join(MARKDOWN_LOG_DIR, filename);
+    const content = readFileSync(filePath, "utf-8");
+    const summary = parseResearchLogSummary(filename, content);
+    if (summary) {
+      cycles.push(summary);
+    }
+  }
+
+  // 日付+startTimeで降順ソート、最新順
+  cycles.sort((a, b) => {
+    const dateA = a.startTime || a.date;
+    const dateB = b.startTime || b.date;
+    return dateB.localeCompare(dateA);
+  });
+
+  // limitを適用
+  const limitedCycles = cycles.slice(0, limit);
+
+  const response: CycleListResponse = {
+    count: limitedCycles.length,
+    data: limitedCycles,
+  };
+
+  res.json(response);
+});
+
+router.get("/cycles/:cycleId", (req: Request, res: Response) => {
+  const cycleId = req.params.cycleId;
+
+  // Extract timestamp from cycleId (format: cycle_1234567890)
+  const timestampMatch = cycleId.match(/^cycle_(\d+)$/);
+  if (!timestampMatch) {
+    res.status(400).json({ error: "Invalid cycle ID format" });
+    return;
+  }
+
+  if (!existsSync(MARKDOWN_LOG_DIR)) {
+    res.status(404).json({ error: "Cycle not found" });
+    return;
+  }
+
+  const timestamp = timestampMatch[1];
+
+  // まず修復サイクルログ（.md）を探す
+  const mdFiles = readdirSync(MARKDOWN_LOG_DIR).filter(
+    (f) => f.endsWith(".md") && f.includes(`cycle-${timestamp}`)
+  );
+
+  if (mdFiles.length > 0) {
+    const filename = mdFiles[0];
+    const filePath = join(MARKDOWN_LOG_DIR, filename);
+    const content = readFileSync(filePath, "utf-8");
+
+    const detail = parseCycleLogDetail(filename, content);
+    if (!detail) {
+      res.status(500).json({ error: "Failed to parse cycle log" });
+      return;
+    }
+
+    const response: CycleDetailResponse = detail;
+    res.json(response);
+    return;
+  }
+
+  // 次にリサーチログ（.json）を探す（timestampがtopic.idの末尾に含まれる）
+  const jsonFiles = readdirSync(MARKDOWN_LOG_DIR).filter(
+    (f) => f.endsWith(".json") && f.includes(RESEARCH_LOG_PREFIX) && f.includes(timestamp)
+  );
+
+  if (jsonFiles.length > 0) {
+    const filename = jsonFiles[0];
+    const filePath = join(MARKDOWN_LOG_DIR, filename);
+    const content = readFileSync(filePath, "utf-8");
+
+    try {
+      const data = JSON.parse(content);
+      // リサーチログをCycleDetail形式に変換
+      const detail: CycleDetail = {
+        cycleId,
+        filename,
+        startTime: data.timestamp || "",
+        endTime: data.timestamp,
+        duration: 0,
+        success: true,
+        issues: [],
+        changes: [],
+        troubles: [],
+        rawContent: `# Research: ${data.topic?.topic || "Unknown"}\n\n## Findings\n${(data.findings || []).map((f: { summary: string; source: string }) => `- **${f.source}**: ${f.summary}`).join("\n")}\n\n## Approaches\n${(data.approaches || []).map((a: { description: string }) => `- ${a.description}`).join("\n")}\n\n## Recommendations\n${(data.recommendations || []).map((r: string) => `- ${r}`).join("\n")}`,
+      };
+      res.json(detail);
+    } catch {
+      res.status(500).json({ error: "Failed to parse research log" });
+    }
+    return;
+  }
+
+  res.status(404).json({ error: "Cycle not found" });
 });
 
 // AI Security Review Stats
