@@ -8,6 +8,7 @@
 import { getAIProvider } from "../ai/factory.js";
 import { QueuedImprovement } from "./types.js";
 import { logger } from "../core/logger.js";
+import { parseJSONObject } from "../ai/json-parser.js";
 
 export interface ReviewResult {
   approved: boolean;
@@ -54,9 +55,14 @@ ${improvement.metadata?.cons ? `デメリット: ${(improvement.metadata.cons as
       const response = await ai.chat(prompt);
 
       // JSON部分を抽出
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+      const parsed = parseJSONObject<{
+        approved?: boolean;
+        reason?: string;
+        concerns?: string[];
+        suggestedPriority?: number;
+      }>(response);
+
+      if (parsed) {
         return {
           approved: parsed.approved ?? false,
           reason: parsed.reason ?? "No reason provided",

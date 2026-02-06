@@ -7,6 +7,7 @@ import {
   SearchResult,
 } from "./provider.js";
 import { logger } from "../core/logger.js";
+import { parseJSONObject } from "./json-parser.js";
 
 export class OpenCodeProvider implements AIProvider {
   name = "opencode";
@@ -116,34 +117,26 @@ ${code}
 \`\`\``;
 
     const response = await this.runOpenCode(prompt);
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      throw new Error("No JSON found");
-    } catch {
-      return {
-        issues: [],
-        suggestions: [],
-        quality: { score: 50, details: "Parse error" },
-      };
+    const parsed = parseJSONObject<Analysis>(response);
+    if (parsed) {
+      return parsed;
     }
+    return {
+      issues: [],
+      suggestions: [],
+      quality: { score: 50, details: "Parse error" },
+    };
   }
 
   async searchAndAnalyze(query: string, codebase: string[]): Promise<SearchResult> {
     const prompt = `Query: ${query}\nFiles: ${codebase.slice(0, 20).join(", ")}\n\nOutput JSON: {"query":"","findings":[{"file":"","content":"","relevance":0}],"analysis":""}`;
 
     const response = await this.runOpenCode(prompt);
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      throw new Error("No JSON found");
-    } catch {
-      return { query, findings: [] };
+    const parsed = parseJSONObject<SearchResult>(response);
+    if (parsed) {
+      return parsed;
     }
+    return { query, findings: [] };
   }
 
   async chat(prompt: string): Promise<string> {

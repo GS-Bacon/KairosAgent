@@ -24,6 +24,7 @@ export interface TrackedChange {
   description: string;
   reviewed: boolean;
   reviewResult?: ReviewResult;
+  confirmationStatus?: "pending" | "confirmed" | "rejected" | "needs_review";
 }
 
 export class ChangeTracker {

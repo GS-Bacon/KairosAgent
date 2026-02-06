@@ -10,6 +10,7 @@ import { ClaudeProvider } from "./claude-provider.js";
 import { ChangeTracker, TrackedChange, ReviewResult, changeTracker } from "./change-tracker.js";
 import { improvementQueue } from "../improvement-queue/index.js";
 import type { ImprovementSource, ImprovementType } from "../improvement-queue/types.js";
+import { parseJSONObject } from "./json-parser.js";
 
 export interface ReviewReport {
   reviewed: number;
@@ -107,13 +108,12 @@ If approved is false, explain why in the issues array.`;
       const response = await this.claudeProvider.chat(prompt);
 
       // JSONをパース
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const result = JSON.parse(jsonMatch[0]) as ReviewResult;
+      const parsed = parseJSONObject<ReviewResult>(response);
+      if (parsed) {
         return {
-          approved: !!result.approved,
-          issues: Array.isArray(result.issues) ? result.issues : [],
-          suggestions: Array.isArray(result.suggestions) ? result.suggestions : [],
+          approved: !!parsed.approved,
+          issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+          suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
         };
       }
 

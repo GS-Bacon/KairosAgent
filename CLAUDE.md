@@ -30,3 +30,23 @@ npm start
 ### API
 - Port 3100でREST API提供
 - `/api/status`, `/api/health`, `/api/events` など
+
+### AI呼び出しルール（必須）
+
+1. **直接プロバイダー作成禁止**:
+   - `new ClaudeProvider()` を直接使用しない
+   - 必ず `getAIProvider()` 経由で取得
+
+2. **例外**: 以下のファイルのみ直接作成を許可
+   - `src/ai/factory.ts`
+   - `src/ai/resilient-provider.ts`
+   - `src/research/researcher.ts`（Opus用）
+   - `src/core/orchestrator.ts`（確認レビュー用）
+
+3. **JSONパース統一**:
+   - `response.match(/\{[\s\S]*\}/)` を直接使用しない
+   - `src/ai/json-parser.ts` の `parseJSONObject()` / `parseJSONArray()` を使用
+
+4. **レートリミット対応**:
+   - `ResilientAIProvider` が自動的にGLMフォールバックを提供
+   - フォールバック時は `ConfirmationQueue` に記録され、次サイクルでClaudeがレビュー

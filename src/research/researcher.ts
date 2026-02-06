@@ -9,6 +9,7 @@ import { ClaudeProvider } from "../ai/claude-provider.js";
 import { logger } from "../core/logger.js";
 import { Goal } from "../goals/types.js";
 import { improvementQueue } from "../improvement-queue/index.js";
+import { parseJSONObject } from "../ai/json-parser.js";
 import {
   ResearchTopic,
   ResearchResult,
@@ -96,11 +97,14 @@ export class Researcher {
   }
 
   /**
-   * トピックが過去に処理済みかチェック
+   * トピックが過去に処理済みかチェック（拡張版）
+   * 完了済みでも新しいアプローチを探す仕組みを追加
    */
   async isTopicAlreadyProcessed(topic: ResearchTopic): Promise<{
     processed: boolean;
     reason?: string;
+    suggestNewApproach?: boolean;
+    previousApproaches?: string[];
   }> {
     if (!topic.relatedGoalId) {
       return { processed: false };
@@ -113,12 +117,17 @@ export class Researcher {
         (i) => i.relatedGoalId === topic.relatedGoalId
       );
 
-      // 完了済みのものがあれば
+      // 完了済みのアプローチを収集
       const completed = relatedImprovements.filter((i) => i.status === "completed");
+      const previousApproaches = completed.map((i) => i.title).slice(0, 5);
+
       if (completed.length > 0) {
+        // 完了済みでも新アプローチを探す（スキップしない）
         return {
-          processed: true,
-          reason: `Already implemented: ${completed.length} related improvements completed`,
+          processed: false,  // スキップしない
+          suggestNewApproach: true,
+          previousApproaches,
+          reason: `${completed.length} approaches already tried, seeking new perspectives`,
         };
       }
 
@@ -131,10 +140,22 @@ export class Researcher {
         return daysSinceSkipped < 7;
       });
 
-      if (recentSkipped.length > 0) {
+      // 3回以上スキップされた場合はトピック終了
+      if (recentSkipped.length >= 3) {
         return {
           processed: true,
-          reason: `Recently rejected: ${recentSkipped.length} related improvements skipped within 7 days`,
+          reason: "Topic exhausted: skipped 3+ times within 7 days",
+        };
+      }
+
+      // 1-2回スキップされた場合は新アプローチを試す
+      if (recentSkipped.length > 0) {
+        const skippedApproaches = recentSkipped.map((i) => i.title).slice(0, 3);
+        return {
+          processed: false,
+          suggestNewApproach: true,
+          previousApproaches: [...previousApproaches, ...skippedApproaches],
+          reason: `${recentSkipped.length} approaches recently skipped, trying new ones`,
         };
       }
 
@@ -171,7 +192,11 @@ export class Researcher {
       };
     }
 
-    const prompt = this.buildResearchPrompt(topic);
+    // 新アプローチを探す場合は過去のアプローチをプロンプトに含める
+    const prompt = this.buildResearchPrompt(topic, {
+      suggestNewApproach: check.suggestNewApproach,
+      previousApproaches: check.previousApproaches,
+    });
 
     try {
       const response = await this.claude.chat(prompt);
@@ -224,14 +249,27 @@ export class Researcher {
   /**
    * 調査プロンプトを生成
    */
-  private buildResearchPrompt(topic: ResearchTopic): string {
+  private buildResearchPrompt(
+    topic: ResearchTopic,
+    options?: { suggestNewApproach?: boolean; previousApproaches?: string[] }
+  ): string {
+    const previousApproachesSection = options?.suggestNewApproach && options.previousApproaches?.length
+      ? `
+## 注意: 以下のアプローチは既に試行済みです
+${options.previousApproaches.map((a, i) => `${i + 1}. ${a}`).join("\n")}
+
+**必ず上記とは異なる新しい視点・アプローチを提案してください。**
+既存のアプローチの改善版や、全く異なる手法を検討してください。
+`
+      : "";
+
     return `あなたは技術調査エージェントです。以下の目標について**幅広い視点で**調査してください。
 
 ## 目標
 ${topic.topic}
 
 ${topic.context ? `## 追加コンテキスト\n${topic.context}` : ""}
-
+${previousApproachesSection}
 ${this.getSystemContext()}
 
 ## 調査の観点（すべて検討すること）
@@ -303,41 +341,38 @@ ${this.getSystemContext()}
    * AI応答をパース
    */
   private parseResponse(response: string): ResearchAIResponse {
-    try {
-      // JSON部分を抽出
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = parseJSONObject<{
+      findings?: Array<Record<string, unknown>>;
+      approaches?: Array<Record<string, unknown>>;
+      recommendations?: string[];
+    }>(response);
 
-        // 必須フィールドの検証とデフォルト値の設定
-        return {
-          findings: Array.isArray(parsed.findings)
-            ? parsed.findings.map((f: Record<string, unknown>) => ({
-                source: String(f.source || "unknown"),
-                summary: String(f.summary || ""),
-              }))
-            : [],
-          approaches: Array.isArray(parsed.approaches)
-            ? parsed.approaches.map((a: Record<string, unknown>) => ({
-                description: String(a.description || ""),
-                pros: Array.isArray(a.pros) ? a.pros.map(String) : [],
-                cons: Array.isArray(a.cons) ? a.cons.map(String) : [],
-                effort: this.normalizeEffort(a.effort),
-                confidence: this.normalizeConfidence(a.confidence),
-              }))
-            : [],
-          recommendations: Array.isArray(parsed.recommendations)
-            ? parsed.recommendations.map(String)
-            : [],
-        };
-      }
-    } catch (err) {
-      logger.warn("Failed to parse research response", {
-        error: err instanceof Error ? err.message : String(err),
-      });
+    if (parsed) {
+      // 必須フィールドの検証とデフォルト値の設定
+      return {
+        findings: Array.isArray(parsed.findings)
+          ? parsed.findings.map((f: Record<string, unknown>) => ({
+              source: String(f.source || "unknown"),
+              summary: String(f.summary || ""),
+            }))
+          : [],
+        approaches: Array.isArray(parsed.approaches)
+          ? parsed.approaches.map((a: Record<string, unknown>) => ({
+              description: String(a.description || ""),
+              pros: Array.isArray(a.pros) ? a.pros.map(String) : [],
+              cons: Array.isArray(a.cons) ? a.cons.map(String) : [],
+              effort: this.normalizeEffort(a.effort),
+              confidence: this.normalizeConfidence(a.confidence),
+            }))
+          : [],
+        recommendations: Array.isArray(parsed.recommendations)
+          ? parsed.recommendations.map(String)
+          : [],
+      };
     }
 
     // パース失敗時のデフォルト
+    logger.warn("Failed to parse research response");
     return {
       findings: [],
       approaches: [],

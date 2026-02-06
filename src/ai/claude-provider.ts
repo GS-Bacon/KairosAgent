@@ -7,6 +7,7 @@ import {
   SearchResult,
 } from "./provider.js";
 import { logger } from "../core/logger.js";
+import { parseJSONObject } from "./json-parser.js";
 
 export interface ClaudeProviderOptions {
   model?: string;           // デフォルト: sonnet (Claude CLIデフォルト)
@@ -158,19 +159,15 @@ Output format (JSON only):
 }`;
 
     const response = await this.runClaude(prompt);
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      throw new Error("No JSON found in response");
-    } catch {
-      return {
-        issues: [],
-        suggestions: [],
-        quality: { score: 50, details: "Unable to parse analysis" },
-      };
+    const parsed = parseJSONObject<Analysis>(response);
+    if (parsed) {
+      return parsed;
     }
+    return {
+      issues: [],
+      suggestions: [],
+      quality: { score: 50, details: "Unable to parse analysis" },
+    };
   }
 
   async searchAndAnalyze(query: string, codebase: string[]): Promise<SearchResult> {
@@ -192,15 +189,11 @@ Analyze which files are most relevant and why. Output JSON:
 }`;
 
     const response = await this.runClaude(prompt);
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-      throw new Error("No JSON found");
-    } catch {
-      return { query, findings: [] };
+    const parsed = parseJSONObject<SearchResult>(response);
+    if (parsed) {
+      return parsed;
     }
+    return { query, findings: [] };
   }
 
   async chat(prompt: string): Promise<string> {

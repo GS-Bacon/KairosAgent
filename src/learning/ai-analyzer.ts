@@ -14,6 +14,7 @@ import {
 } from "./types.js";
 import { getAIProvider } from "../ai/factory.js";
 import { logger } from "../core/logger.js";
+import { parseJSONObject } from "../ai/json-parser.js";
 
 export class AIAnalyzer {
   /**
@@ -200,19 +201,18 @@ Please respond in JSON format:
 
       const response = await provider.chat(prompt);
 
-      try {
-        // JSON部分を抽出
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return {
-            isGeneralizable: parsed.isGeneralizable || false,
-            suggestedPattern: parsed.suggestedPattern,
-            confidence: parsed.confidence || 0,
-          };
-        }
-      } catch {
-        // JSONパース失敗
+      const parsed = parseJSONObject<{
+        isGeneralizable?: boolean;
+        suggestedPattern?: string;
+        confidence?: number;
+      }>(response);
+
+      if (parsed) {
+        return {
+          isGeneralizable: parsed.isGeneralizable || false,
+          suggestedPattern: parsed.suggestedPattern,
+          confidence: parsed.confidence || 0,
+        };
       }
 
       return { isGeneralizable: false, confidence: 0 };
@@ -296,19 +296,18 @@ Respond in JSON format:
     confidence: number;
     codeSnippet?: string;
   } | null {
-    try {
-      // JSON部分を抽出
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          suggestion: parsed.suggestion || "",
-          confidence: parsed.confidence || 0.5,
-          codeSnippet: parsed.codeSnippet,
-        };
-      }
-    } catch {
-      // JSONパース失敗 - テキストから抽出を試みる
+    const parsed = parseJSONObject<{
+      suggestion?: string;
+      confidence?: number;
+      codeSnippet?: string;
+    }>(response);
+
+    if (parsed) {
+      return {
+        suggestion: parsed.suggestion || "",
+        confidence: parsed.confidence || 0.5,
+        codeSnippet: parsed.codeSnippet,
+      };
     }
 
     // フォールバック: プレーンテキストとして扱う

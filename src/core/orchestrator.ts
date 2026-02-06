@@ -8,6 +8,9 @@ import { tokenTracker } from "../ai/token-tracker.js";
 import { ClaudeProvider } from "../ai/claude-provider.js";
 import { workDetector } from "./work-detector.js";
 import { cycleLogger } from "./cycle-logger.js";
+import { confirmationQueue } from "../ai/confirmation-queue.js";
+import { changeTracker } from "../ai/change-tracker.js";
+import { claudeReviewer } from "../ai/claude-reviewer.js";
 
 import { HealthCheckPhase } from "../phases/1-health-check/index.js";
 import { ErrorDetectPhase } from "../phases/2-error-detect/index.js";
@@ -139,6 +142,13 @@ export class Orchestrator {
       activeGoals: context.activeGoals.length,
     });
     await eventBus.emit({ type: "cycle_started", timestamp: context.startTime });
+
+    // GLMフォールバック変更の確認レビュー
+    try {
+      await this.reviewPendingConfirmations();
+    } catch (error) {
+      logger.warn("Failed to review pending confirmations", { error });
+    }
 
     try {
       for (const phase of this.phases) {
@@ -595,6 +605,67 @@ export class Orchestrator {
   resetFailureCounter(): void {
     this.consecutiveCycleFailures = 0;
     this.systemPaused = false;
+  }
+
+  /**
+   * GLMフォールバック変更の確認レビュー
+   * Claude利用可能時にpending状態の変更をレビュー
+   */
+  private async reviewPendingConfirmations(): Promise<void> {
+    try {
+      // Claude利用可能かチェック
+      const claude = new ClaudeProvider();
+      const isAvailable = await claude.isAvailable();
+      if (!isAvailable) {
+        logger.debug("Claude not available, skipping confirmation review");
+        return;
+      }
+
+      // pending状態の確認キューを取得
+      const pending = await confirmationQueue.getPending();
+      if (pending.length === 0) {
+        return;
+      }
+
+      logger.info("Reviewing GLM fallback changes from previous cycles", {
+        count: pending.length,
+      });
+
+      for (const item of pending.slice(0, 3)) {  // 最大3件/サイクル
+        const change = changeTracker.getChange(item.changeId);
+        if (!change) {
+          await confirmationQueue.markReviewed(item.id, "confirmed", "Change not found");
+          continue;
+        }
+
+        try {
+          // ClaudeReviewerで単一変更をレビュー
+          await confirmationQueue.markInReview(item.id);
+          const result = await claudeReviewer.reviewPendingChanges();
+
+          // 問題があれば改善キューに登録
+          if (result.issues.length > 0) {
+            await confirmationQueue.markReviewed(
+              item.id,
+              "needs_review",
+              result.issues.map((i) => i.issues.join(", ")).join("; ")
+            );
+          } else {
+            await confirmationQueue.markReviewed(item.id, "confirmed", "No issues found");
+          }
+        } catch (err) {
+          logger.warn("Failed to review confirmation item", {
+            itemId: item.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          // エラー時はpending状態を維持（次サイクルで再試行）
+        }
+      }
+    } catch (error) {
+      logger.warn("Confirmation review failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

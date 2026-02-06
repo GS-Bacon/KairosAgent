@@ -3,6 +3,7 @@ import { ClaudeProvider } from "./claude-provider.js";
 import { GLMProvider } from "./glm-provider.js";
 import { OpenCodeProvider } from "./opencode-provider.js";
 import { HybridProvider } from "./hybrid-provider.js";
+import { ResilientAIProvider } from "./resilient-provider.js";
 import { logger } from "../core/logger.js";
 
 export interface AIConfig {
@@ -18,6 +19,7 @@ export interface AIConfig {
     baseUrl?: string;
     model?: string;
   };
+  resilient?: boolean;  // ResilientProviderでラップするか（デフォルト: true）
 }
 
 let currentProvider: AIProvider | null = null;
@@ -48,9 +50,15 @@ export function createAIProvider(config: AIConfig): AIProvider {
   }
 }
 
-export function setGlobalProvider(provider: AIProvider): void {
-  currentProvider = provider;
-  logger.info(`Set global AI provider: ${provider.name}`);
+export function setGlobalProvider(provider: AIProvider, glmApiKey?: string): void {
+  // ResilientProviderでラップ（GLM APIキーがあれば）
+  if (glmApiKey && !(provider instanceof ResilientAIProvider)) {
+    currentProvider = new ResilientAIProvider(provider, glmApiKey);
+    logger.info(`Set global AI provider with resilient wrapper: ${provider.name}`);
+  } else {
+    currentProvider = provider;
+    logger.info(`Set global AI provider: ${provider.name}`);
+  }
 }
 
 export function getAIProvider(): AIProvider {
@@ -68,6 +76,15 @@ export async function initializeAI(config: AIConfig): Promise<AIProvider> {
     throw new Error(`AI provider ${provider.name} is not available`);
   }
 
-  setGlobalProvider(provider);
-  return provider;
+  // resilientがfalse以外ならResilientProviderでラップ
+  const useResilient = config.resilient !== false;
+  const glmApiKey = config.glm?.apiKey;
+
+  if (useResilient && glmApiKey) {
+    setGlobalProvider(provider, glmApiKey);
+  } else {
+    setGlobalProvider(provider);
+  }
+
+  return getAIProvider();
 }

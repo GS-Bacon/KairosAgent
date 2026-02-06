@@ -8,6 +8,7 @@ import { getAIProvider } from "../ai/factory.js";
 import { TroublePattern, PreventionSuggestion, PreventionType } from "./types.js";
 import { Trouble } from "../trouble/types.js";
 import { logger } from "../core/logger.js";
+import { parseJSONArray } from "../ai/json-parser.js";
 
 interface GenerationContext {
   pattern: TroublePattern;
@@ -87,15 +88,20 @@ JSONのみを返してください。`;
       const response = await ai.chat(prompt);
 
       // JSONをパース
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
+      const parsed = parseJSONArray<Array<{
+        type?: string;
+        description?: string;
+        implementation?: string;
+        automated?: boolean;
+      }>>(response);
+
+      if (!parsed) {
         logger.warn("Failed to parse AI prevention suggestions", {
           response: response.slice(0, 200),
         });
         return this.generateSimple(pattern);
       }
 
-      const parsed = JSON.parse(jsonMatch[0]);
       return parsed.map(
         (item: {
           type?: string;

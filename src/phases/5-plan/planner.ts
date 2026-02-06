@@ -2,6 +2,7 @@ import { Issue, Improvement, SearchResult } from "../types.js";
 import { Plan, PlanStep } from "./types.js";
 import { getAIProvider } from "../../ai/factory.js";
 import { logger } from "../../core/logger.js";
+import { parseJSONArray } from "../../ai/json-parser.js";
 
 export class RepairPlanner {
   async createPlan(
@@ -72,21 +73,32 @@ Be specific and minimal. Output ONLY the JSON array.`;
   }
 
   private parsePlanFromAI(response: string): PlanStep[] {
-    try {
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return parsed.map((step: any, i: number) => ({
-          order: step.order || i + 1,
-          action: step.action || "modify",
-          file: step.file || "unknown",
-          details: step.details || "",
-        }));
-      }
-    } catch {
-      logger.warn("Failed to parse AI plan response");
+    const parsed = parseJSONArray<Array<{
+      order?: number;
+      action?: string;
+      file?: string;
+      details?: string;
+    }>>(response);
+
+    if (parsed && Array.isArray(parsed)) {
+      return parsed.map((step, i: number) => ({
+        order: step.order || i + 1,
+        action: this.normalizeAction(step.action),
+        file: step.file || "unknown",
+        details: step.details || "",
+      }));
     }
+
+    logger.warn("Failed to parse AI plan response");
     return [];
+  }
+
+  private normalizeAction(action?: string): "create" | "modify" | "delete" | "refactor" {
+    const validActions = ["create", "modify", "delete", "refactor"] as const;
+    if (action && validActions.includes(action as typeof validActions[number])) {
+      return action as "create" | "modify" | "delete" | "refactor";
+    }
+    return "modify";
   }
 
   private createFallbackPlan(target: Issue | Improvement): PlanStep[] {

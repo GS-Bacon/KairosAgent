@@ -7,6 +7,7 @@
 
 import { logger } from "../core/logger.js";
 import { getAIProvider } from "./factory.js";
+import { parseJSONObject } from "./json-parser.js";
 
 /**
  * サイクル要約の入力データ
@@ -121,9 +122,8 @@ ${troublesSummary}
       const response = await provider.chat(prompt);
 
       // JSONを抽出
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as CycleSummary;
+      const parsed = parseJSONObject<CycleSummary>(response);
+      if (parsed) {
         return parsed;
       }
 
@@ -176,9 +176,8 @@ ${summariesText}
       const response = await provider.chat(prompt);
 
       // JSONを抽出
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as DailySummary;
+      const parsed = parseJSONObject<DailySummary>(response);
+      if (parsed) {
         return parsed;
       }
 
