@@ -10,6 +10,7 @@ import { writeFileSync, existsSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
 import { cycleLogger, CycleLogData } from "./cycle-logger.js";
 import { logger } from "./logger.js";
+import { aiSummarizer, DailySummary, CycleSummary } from "../ai/summarizer.js";
 
 const LOG_DIR = "./workspace/logs";
 
@@ -31,7 +32,9 @@ export interface DailyReportData {
     success: boolean;
     changes: number;
     issues: number;
+    aiSummary?: CycleSummary;
   }>;
+  aiSummary?: DailySummary;
 }
 
 class DailyReporter {
@@ -52,6 +55,38 @@ class DailyReporter {
     }
 
     const reportData = this.buildReportData(targetDate, cycleLogs);
+
+    // AI要約を生成
+    try {
+      const cycleSummaries: CycleSummary[] = reportData.cycleSummaries
+        .filter(c => c.aiSummary)
+        .map(c => c.aiSummary!);
+
+      const stats = {
+        cyclesExecuted: reportData.cyclesExecuted,
+        successRate: reportData.successRate,
+        troublesEncountered: reportData.troublesEncountered,
+        totalTokenInput: reportData.totalTokenInput,
+        totalTokenOutput: reportData.totalTokenOutput,
+      };
+
+      const aiSummary = await aiSummarizer.summarizeDaily(cycleSummaries, stats);
+      if (aiSummary) {
+        reportData.aiSummary = aiSummary;
+      } else {
+        reportData.aiSummary = aiSummarizer.generateFallbackDailySummary(stats);
+      }
+    } catch (error) {
+      logger.warn("Failed to generate daily AI summary, using fallback", { error });
+      reportData.aiSummary = aiSummarizer.generateFallbackDailySummary({
+        cyclesExecuted: reportData.cyclesExecuted,
+        successRate: reportData.successRate,
+        troublesEncountered: reportData.troublesEncountered,
+        totalTokenInput: reportData.totalTokenInput,
+        totalTokenOutput: reportData.totalTokenOutput,
+      });
+    }
+
     const markdown = this.formatMarkdown(reportData);
     const filename = `${targetDate}-daily-report.md`;
 
@@ -116,6 +151,7 @@ class DailyReporter {
         success: log.success,
         changes,
         issues: log.issuesDetected.length,
+        aiSummary: log.aiSummary,
       });
     }
 
@@ -146,6 +182,38 @@ class DailyReporter {
     // Header
     lines.push(`# Daily Report: ${data.date}`);
     lines.push("");
+
+    // AI Analysis Section（最初に表示）
+    if (data.aiSummary) {
+      lines.push("## AI Analysis");
+      lines.push(`**Overall**: ${data.aiSummary.overallStatus}`);
+      lines.push("");
+
+      if (data.aiSummary.mainIssues.length > 0) {
+        lines.push("**Main Issues**:");
+        for (const issue of data.aiSummary.mainIssues) {
+          lines.push(`- ${issue}`);
+        }
+        lines.push("");
+      }
+
+      if (data.aiSummary.trendAnalysis) {
+        lines.push("**Trend Analysis**:");
+        lines.push(data.aiSummary.trendAnalysis);
+        lines.push("");
+      }
+
+      if (data.aiSummary.recommendations.length > 0) {
+        lines.push("**Recommendations**:");
+        for (const rec of data.aiSummary.recommendations) {
+          lines.push(`- ${rec}`);
+        }
+        lines.push("");
+      }
+
+      lines.push("---");
+      lines.push("");
+    }
 
     // Overview
     lines.push("## Overview");

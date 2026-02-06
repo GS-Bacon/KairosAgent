@@ -9,6 +9,10 @@ export interface Issue {
   file?: string;
   line?: number;
   timestamp: Date;
+  // 追加フィールド: 詳細な問題追跡
+  detectedProblem?: string;  // 何を検出したか（要約）
+  resolution?: string;        // どう対処したか
+  resolved?: boolean;         // 解決済みか
 }
 
 export interface Improvement {
@@ -63,6 +67,9 @@ export interface CycleContext {
   implementedChanges?: Array<{
     file: string;
     changeType: "create" | "modify" | "delete";
+    // 追加フィールド: 変更詳細
+    summary?: string;       // 変更内容の要約（1-2行）
+    relatedIssue?: string;  // 関連するIssue ID
   }>;
   testResults?: {
     passed: boolean;
@@ -81,6 +88,10 @@ export interface CycleContext {
 
   // Trouble tracking
   troubles?: Trouble[];     // サイクル中に発生したトラブル
+
+  // Failure tracking（失敗追跡）
+  failedPhase?: string;      // 失敗したフェーズ名
+  failureReason?: string;    // 失敗理由の要約
 
   // Token usage tracking
   tokenUsage?: {

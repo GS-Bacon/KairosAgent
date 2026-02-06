@@ -9,8 +9,10 @@ import { writeFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 
 import { join } from "path";
 import { CycleContext } from "../phases/types.js";
 import { logger } from "./logger.js";
+import { aiSummarizer, CycleSummary, CycleSummaryInput } from "../ai/summarizer.js";
 
 const LOG_DIR = "./workspace/logs";
+const MAX_MESSAGE_LENGTH = 200;  // エラーメッセージの最大長
 
 export interface CycleLogData {
   cycleId: string;
@@ -23,10 +25,15 @@ export interface CycleLogData {
     type: string;
     message: string;
     file?: string;
+    detectedProblem?: string;
+    resolution?: string;
+    resolved?: boolean;
   }>;
   changesMade: Array<{
     file: string;
     changeType: string;
+    summary?: string;
+    relatedIssue?: string;
   }>;
   troubles: Array<{
     type: string;
@@ -36,6 +43,9 @@ export interface CycleLogData {
     totalInput: number;
     totalOutput: number;
   };
+  failedPhase?: string;
+  failureReason?: string;
+  aiSummary?: CycleSummary;
 }
 
 class CycleLogger {
@@ -69,13 +79,49 @@ class CycleLogger {
   /**
    * サイクルログを保存
    */
-  saveLog(context: CycleContext, success: boolean, skippedEarly: boolean = false): string | null {
+  async saveLog(context: CycleContext, success: boolean, skippedEarly: boolean = false): Promise<string | null> {
     if (!this.shouldLog(context, skippedEarly)) {
       logger.debug("Skipping cycle log - no significant work");
       return null;
     }
 
     const logData = this.buildLogData(context, success, skippedEarly);
+
+    // AI要約を生成
+    try {
+      const summaryInput: CycleSummaryInput = {
+        cycleId: logData.cycleId,
+        success: logData.success,
+        duration: logData.duration,
+        failedPhase: logData.failedPhase,
+        failureReason: logData.failureReason,
+        issues: logData.issuesDetected,
+        changes: logData.changesMade,
+        troubles: logData.troubles,
+      };
+
+      const aiSummary = await aiSummarizer.summarizeCycle(summaryInput);
+      if (aiSummary) {
+        logData.aiSummary = aiSummary;
+      } else {
+        // フォールバック要約を使用
+        logData.aiSummary = aiSummarizer.generateFallbackCycleSummary(summaryInput);
+      }
+    } catch (error) {
+      logger.warn("Failed to generate AI summary, using fallback", { error });
+      // フォールバック要約
+      logData.aiSummary = aiSummarizer.generateFallbackCycleSummary({
+        cycleId: logData.cycleId,
+        success: logData.success,
+        duration: logData.duration,
+        failedPhase: logData.failedPhase,
+        failureReason: logData.failureReason,
+        issues: logData.issuesDetected,
+        changes: logData.changesMade,
+        troubles: logData.troubles,
+      });
+    }
+
     const markdown = this.formatMarkdown(logData);
     const filename = this.getFilename(logData);
 
@@ -89,6 +135,31 @@ class CycleLogger {
       logger.error("Failed to save cycle log", { error });
       return null;
     }
+  }
+
+  /**
+   * エラーメッセージを截断（JSON部分を除去）
+   */
+  private truncateMessage(msg: string, maxLen: number = MAX_MESSAGE_LENGTH): string {
+    if (!msg) return "";
+
+    // JSON部分を検出して除去
+    const jsonStart = msg.indexOf('{');
+    const jsonArrayStart = msg.indexOf('[');
+
+    let cleanMsg = msg;
+    if (jsonStart > 0 && (jsonArrayStart < 0 || jsonStart < jsonArrayStart)) {
+      cleanMsg = msg.slice(0, jsonStart).trim();
+    } else if (jsonArrayStart > 0) {
+      cleanMsg = msg.slice(0, jsonArrayStart).trim();
+    }
+
+    // 长すぎる場合は截断
+    if (cleanMsg.length > maxLen) {
+      return cleanMsg.slice(0, maxLen) + "...";
+    }
+
+    return cleanMsg;
   }
 
   /**
@@ -107,16 +178,21 @@ class CycleLogger {
       skippedEarly,
       issuesDetected: (context.issues || []).map((i) => ({
         type: i.type,
-        message: i.message,
+        message: this.truncateMessage(i.message),
         file: i.file,
+        detectedProblem: i.detectedProblem,
+        resolution: i.resolution,
+        resolved: i.resolved,
       })),
       changesMade: (context.implementedChanges || []).map((c) => ({
         file: c.file,
         changeType: c.changeType,
+        summary: c.summary,
+        relatedIssue: c.relatedIssue,
       })),
       troubles: (context.troubles || []).map((t) => ({
         type: t.category,
-        message: t.message,
+        message: this.truncateMessage(t.message),
       })),
       tokenUsage: context.tokenUsage
         ? {
@@ -124,7 +200,26 @@ class CycleLogger {
             totalOutput: context.tokenUsage.totalOutput,
           }
         : undefined,
+      failedPhase: context.failedPhase,
+      failureReason: context.failureReason,
     };
+  }
+
+  /**
+   * サマリー統計を計算
+   */
+  private calculateSummaryStats(data: CycleLogData): {
+    resolvedIssues: number;
+    unresolvedIssues: number;
+    successfulChanges: number;
+    troubleCount: number;
+  } {
+    const resolvedIssues = data.issuesDetected.filter(i => i.resolved).length;
+    const unresolvedIssues = data.issuesDetected.filter(i => !i.resolved).length;
+    const successfulChanges = data.changesMade.length;
+    const troubleCount = data.troubles.length;
+
+    return { resolvedIssues, unresolvedIssues, successfulChanges, troubleCount };
   }
 
   /**
@@ -132,45 +227,99 @@ class CycleLogger {
    */
   private formatMarkdown(data: CycleLogData): string {
     const lines: string[] = [];
+    const stats = this.calculateSummaryStats(data);
 
     lines.push(`# Cycle Log: ${data.cycleId}`);
     lines.push("");
-    lines.push("## Summary");
-    lines.push(`- **Start Time**: ${data.startTime.toISOString()}`);
-    lines.push(`- **End Time**: ${data.endTime.toISOString()}`);
+
+    // AI Summary Section（最初に表示）
+    if (data.aiSummary) {
+      lines.push("## AI Summary");
+      lines.push(`**Status**: ${data.aiSummary.status}`);
+      lines.push("");
+      lines.push(`**What Happened**:`);
+      lines.push(data.aiSummary.whatHappened);
+      lines.push("");
+      if (data.aiSummary.recommendation) {
+        lines.push(`**Recommendation**:`);
+        lines.push(data.aiSummary.recommendation);
+        lines.push("");
+      }
+      lines.push("---");
+      lines.push("");
+    }
+
+    // Quick Summary Section
+    lines.push("## Quick Summary");
+    lines.push(`- **Status**: ${data.success ? "✅ Success" : "❌ Failure"}`);
     lines.push(`- **Duration**: ${(data.duration / 1000).toFixed(1)} seconds`);
-    lines.push(`- **Status**: ${data.success ? "Success" : "Failure"}`);
+    lines.push(`- **Issues**: ${stats.resolvedIssues} resolved, ${stats.unresolvedIssues} unresolved`);
+    lines.push(`- **Changes**: ${stats.successfulChanges} files modified`);
+    if (stats.troubleCount > 0) {
+      lines.push(`- **Troubles**: ${stats.troubleCount} encountered`);
+    }
     lines.push("");
 
+    // Detailed Timing
+    lines.push("## Timing");
+    lines.push(`- **Start**: ${data.startTime.toISOString()}`);
+    lines.push(`- **End**: ${data.endTime.toISOString()}`);
+    lines.push("");
+
+    // Issues Detected with details
     if (data.issuesDetected.length > 0) {
       lines.push("## Issues Detected");
-      for (const issue of data.issuesDetected) {
-        const location = issue.file ? ` @ ${issue.file}` : "";
-        lines.push(`- [${issue.type}] ${issue.message}${location}`);
-      }
       lines.push("");
+      for (const issue of data.issuesDetected) {
+        const statusIcon = issue.resolved ? "✅" : "⏳";
+        const location = issue.file ? ` @ \`${issue.file}\`` : "";
+        lines.push(`### ${statusIcon} [${issue.type}]${location}`);
+
+        if (issue.detectedProblem) {
+          lines.push(`**Problem**: ${issue.detectedProblem}`);
+        } else {
+          lines.push(`**Message**: ${issue.message}`);
+        }
+
+        if (issue.resolution) {
+          lines.push(`**Resolution**: ${issue.resolution}`);
+        }
+        lines.push("");
+      }
     }
 
+    // Changes Made with summaries
     if (data.changesMade.length > 0) {
       lines.push("## Changes Made");
-      for (const change of data.changesMade) {
-        lines.push(`- ${change.file}: ${change.changeType}`);
-      }
       lines.push("");
+      for (const change of data.changesMade) {
+        lines.push(`### \`${change.file}\` (${change.changeType})`);
+        if (change.summary) {
+          lines.push(`${change.summary}`);
+        }
+        if (change.relatedIssue) {
+          lines.push(`*Related to issue: ${change.relatedIssue}*`);
+        }
+        lines.push("");
+      }
     }
 
+    // Troubles Encountered
     if (data.troubles.length > 0) {
       lines.push("## Troubles Encountered");
+      lines.push("");
       for (const trouble of data.troubles) {
-        lines.push(`- [${trouble.type}] ${trouble.message}`);
+        lines.push(`- **[${trouble.type}]** ${trouble.message}`);
       }
       lines.push("");
     }
 
+    // Token Usage
     if (data.tokenUsage) {
       lines.push("## Token Usage");
-      lines.push(`- **Total Input**: ${data.tokenUsage.totalInput.toLocaleString()} tokens`);
-      lines.push(`- **Total Output**: ${data.tokenUsage.totalOutput.toLocaleString()} tokens`);
+      lines.push(`- **Input**: ${data.tokenUsage.totalInput.toLocaleString()} tokens`);
+      lines.push(`- **Output**: ${data.tokenUsage.totalOutput.toLocaleString()} tokens`);
+      lines.push(`- **Total**: ${(data.tokenUsage.totalInput + data.tokenUsage.totalOutput).toLocaleString()} tokens`);
       lines.push("");
     }
 
@@ -236,72 +385,63 @@ class CycleLogger {
       if (!titleMatch) return null;
       const cycleId = titleMatch[1];
 
-      // Summary セクションをパース
-      const startTimeMatch = content.match(/\*\*Start Time\*\*: (.+)/);
-      const endTimeMatch = content.match(/\*\*End Time\*\*: (.+)/);
+      // Timing セクションをパース
+      const startTimeMatch = content.match(/\*\*Start\*\*: (.+)/);
+      const endTimeMatch = content.match(/\*\*End\*\*: (.+)/);
       const durationMatch = content.match(/\*\*Duration\*\*: ([\d.]+) seconds/);
-      const statusMatch = content.match(/\*\*Status\*\*: (Success|Failure)/);
+      const statusMatch = content.match(/\*\*Status\*\*: (✅ Success|❌ Failure)/);
 
       const startTime = startTimeMatch ? new Date(startTimeMatch[1]) : new Date();
       const endTime = endTimeMatch ? new Date(endTimeMatch[1]) : new Date();
       const duration = durationMatch ? parseFloat(durationMatch[1]) * 1000 : 0;
-      const success = statusMatch ? statusMatch[1] === "Success" : false;
+      const success = statusMatch ? statusMatch[1].includes("Success") : false;
 
-      // 各セクションをパース
+      // 各セクションをパース（簡易版）
       const issuesDetected: Array<{ type: string; message: string; file?: string }> = [];
       const changesMade: Array<{ file: string; changeType: string }> = [];
       const troubles: Array<{ type: string; message: string }> = [];
 
       // Issues Detected セクション
-      const issuesSection = content.match(/## Issues Detected\n([\s\S]*?)(?=\n##|$)/);
+      const issuesSection = content.match(/## Issues Detected\n([\s\S]*?)(?=\n## |$)/);
       if (issuesSection) {
-        const issueLines = issuesSection[1].split("\n").filter((l) => l.startsWith("- "));
-        for (const line of issueLines) {
-          const match = line.match(/- \[(\w+)\] (.+?)(?:\s+@\s+(.+))?$/);
-          if (match) {
-            issuesDetected.push({
-              type: match[1],
-              message: match[2],
-              file: match[3],
-            });
-          }
+        const issueMatches = issuesSection[1].matchAll(/### [✅⏳] \[(\w+)\](?:\s+@\s+`([^`]+)`)?/g);
+        for (const match of issueMatches) {
+          issuesDetected.push({
+            type: match[1],
+            message: "",
+            file: match[2],
+          });
         }
       }
 
       // Changes Made セクション
-      const changesSection = content.match(/## Changes Made\n([\s\S]*?)(?=\n##|$)/);
+      const changesSection = content.match(/## Changes Made\n([\s\S]*?)(?=\n## |$)/);
       if (changesSection) {
-        const changeLines = changesSection[1].split("\n").filter((l) => l.startsWith("- "));
-        for (const line of changeLines) {
-          const match = line.match(/- (.+): (\w+)/);
-          if (match) {
-            changesMade.push({
-              file: match[1],
-              changeType: match[2],
-            });
-          }
+        const changeMatches = changesSection[1].matchAll(/### `([^`]+)` \((\w+)\)/g);
+        for (const match of changeMatches) {
+          changesMade.push({
+            file: match[1],
+            changeType: match[2],
+          });
         }
       }
 
       // Troubles セクション
-      const troublesSection = content.match(/## Troubles Encountered\n([\s\S]*?)(?=\n##|$)/);
+      const troublesSection = content.match(/## Troubles Encountered\n([\s\S]*?)(?=\n## |$)/);
       if (troublesSection) {
-        const troubleLines = troublesSection[1].split("\n").filter((l) => l.startsWith("- "));
-        for (const line of troubleLines) {
-          const match = line.match(/- \[(\w+)\] (.+)/);
-          if (match) {
-            troubles.push({
-              type: match[1],
-              message: match[2],
-            });
-          }
+        const troubleMatches = troublesSection[1].matchAll(/- \*\*\[(\w+)\]\*\* (.+)/g);
+        for (const match of troubleMatches) {
+          troubles.push({
+            type: match[1],
+            message: match[2],
+          });
         }
       }
 
       // Token Usage セクション
       let tokenUsage: { totalInput: number; totalOutput: number } | undefined;
-      const inputMatch = content.match(/\*\*Total Input\*\*: ([\d,]+) tokens/);
-      const outputMatch = content.match(/\*\*Total Output\*\*: ([\d,]+) tokens/);
+      const inputMatch = content.match(/\*\*Input\*\*: ([\d,]+) tokens/);
+      const outputMatch = content.match(/\*\*Output\*\*: ([\d,]+) tokens/);
       if (inputMatch && outputMatch) {
         tokenUsage = {
           totalInput: parseInt(inputMatch[1].replace(/,/g, ""), 10),

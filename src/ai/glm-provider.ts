@@ -49,15 +49,24 @@ export class GLMProvider implements AIProvider {
   }
 
   async generateCode(prompt: string, context: CodeContext): Promise<string> {
-    const fullPrompt = `You are a code generator. Generate ONLY the code, no explanations.
+    const fullPrompt = `You are a TypeScript code generator.
+
+CRITICAL SYNTAX RULES - YOU MUST FOLLOW:
+1. All brackets MUST be balanced: (), [], {}
+2. All statements MUST be complete - no partial code
+3. All strings MUST be properly closed
+4. Use proper semicolons and commas
+5. All import/export statements MUST be complete
+6. Wrap your code in \`\`\`typescript ... \`\`\` block
+7. Output ONLY the code - no explanations before or after
 
 File: ${context.file}
-${context.existingCode ? `Existing code:\n${context.existingCode}` : ""}
-${context.issue ? `Issue to fix: ${context.issue}` : ""}
+${context.existingCode ? `\nExisting code:\n\`\`\`typescript\n${context.existingCode}\n\`\`\`` : ""}
+${context.issue ? `\nIssue to fix: ${context.issue}` : ""}
 
 Task: ${prompt}
 
-Output ONLY the complete code for the file.`;
+Generate the COMPLETE, SYNTACTICALLY VALID TypeScript code for this file:`;
 
     return this.callAPI([{ role: "user", content: fullPrompt }]);
   }

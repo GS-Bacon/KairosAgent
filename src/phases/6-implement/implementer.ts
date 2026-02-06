@@ -200,8 +200,21 @@ export class CodeImplementer {
         { file: filePath }
       );
 
-      // ANSIエスケープ除去とコードブロック抽出
-      const newContent = CodeSanitizer.extractCodeBlock(rawContent, "typescript");
+      // ANSIエスケープ除去、コードブロック抽出、検証
+      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+      if (!extracted.valid) {
+        logger.error("Generated code has syntax errors", {
+          file: filePath,
+          errors: extracted.errors,
+        });
+        return {
+          file: filePath,
+          changeType: "create",
+          success: false,
+          error: `Invalid TypeScript syntax: ${extracted.errors.join(", ")}`,
+        };
+      }
+      const newContent = extracted.code;
 
       // 制御文字チェック
       if (CodeSanitizer.containsControlChars(newContent)) {
@@ -292,8 +305,22 @@ export class CodeImplementer {
         { file: filePath, existingCode: originalContent, issue }
       );
 
-      // ANSIエスケープ除去とコードブロック抽出
-      const newContent = CodeSanitizer.extractCodeBlock(rawContent, "typescript");
+      // ANSIエスケープ除去、コードブロック抽出、検証
+      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+      if (!extracted.valid) {
+        logger.error("Generated code has syntax errors", {
+          file: filePath,
+          errors: extracted.errors,
+        });
+        return {
+          file: filePath,
+          changeType: "modify",
+          originalContent,
+          success: false,
+          error: `Invalid TypeScript syntax: ${extracted.errors.join(", ")}`,
+        };
+      }
+      const newContent = extracted.code;
 
       // 制御文字チェック
       if (CodeSanitizer.containsControlChars(newContent)) {

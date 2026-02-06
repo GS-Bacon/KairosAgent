@@ -172,6 +172,9 @@ export class Orchestrator {
         if (!result.success) {
           logger.warn(`Phase ${phase.name} failed`, { message: result.message });
           this.lastFailedPhase = phase.name;
+          // CycleContextに失敗情報を記録
+          context.failedPhase = phase.name;
+          context.failureReason = result.message || `Phase ${phase.name} failed`;
           // Phase 6 (implement) や Phase 8 (verify) の失敗は重大
           if (phase.name === "implement" || phase.name === "verify") {
             this.hasCriticalFailure = true;
@@ -317,8 +320,10 @@ export class Orchestrator {
     const shouldRetry = cycleSuccess ? false : this.shouldRetryImmediately(context);
     const retryReason = this.getRetryReason(context);
 
-    // サイクルログを保存
-    cycleLogger.saveLog(context, cycleSuccess, false);
+    // サイクルログを保存（非同期だがawaitしない - ログ保存で後続処理をブロックしない）
+    cycleLogger.saveLog(context, cycleSuccess, false).catch(err => {
+      logger.warn("Failed to save cycle log", { error: err });
+    });
 
     return {
       cycleId: context.cycleId,
