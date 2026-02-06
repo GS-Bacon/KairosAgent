@@ -171,6 +171,45 @@ export function createCycleContext(): CycleContext {
 }
 
 /**
+ * フルCycleContextを作成する
+ * orchestrator.tsで初期化が散在していたフィールドを一箇所で初期化
+ * これにより初期化漏れやnullアクセスエラーを防止
+ */
+export function createFullCycleContext(options?: {
+  activeGoals?: Goal[];
+  cycleId?: string;
+}): CycleContext {
+  return {
+    cycleId: options?.cycleId || `cycle_${Date.now()}`,
+    startTime: new Date(),
+    issues: [],
+    improvements: [],
+    // Goal context
+    activeGoals: options?.activeGoals || [],
+    goalProgress: [],
+    // Learning system fields
+    usedPatterns: [],
+    patternMatches: 0,
+    aiCalls: 0,
+    // Trouble tracking
+    troubles: [],
+    // Token usage (populated during cycle)
+    tokenUsage: undefined,
+    // Failure tracking (populated on failure)
+    failedPhase: undefined,
+    failureReason: undefined,
+    // Implementation tracking (populated during implement phase)
+    implementedChanges: undefined,
+    testResults: undefined,
+    searchResults: undefined,
+    plan: undefined,
+    snapshotId: undefined,
+    // Cycle type data (populated for specialized cycles like research)
+    cycleData: undefined,
+  };
+}
+
+/**
  * サイクル実行結果
  * Orchestratorが返す、スケジューラーが即時再実行判断に使用
  */

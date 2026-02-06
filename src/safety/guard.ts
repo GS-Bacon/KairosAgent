@@ -45,6 +45,7 @@ const DEFAULT_CONFIG: GuardConfig = {
   ],
   // 条件付き保護: AIレビューで承認されれば変更可
   conditionallyProtectedPatterns: [
+    "src/core/orchestrator.ts",  // 複雑なコアロジック、頻繁に壊れるため保護
     "src/core/logger.ts",
     "src/ai/claude-provider.ts",
     "src/ai/hybrid-provider.ts",
@@ -58,6 +59,7 @@ const DEFAULT_CONFIG: GuardConfig = {
   // 後方互換性のため protectedPatterns も維持（両方の合計）
   protectedPatterns: [
     "src/safety/",
+    "src/core/orchestrator.ts",
     "src/core/logger.ts",
     "src/ai/claude-provider.ts",
     "src/ai/hybrid-provider.ts",
