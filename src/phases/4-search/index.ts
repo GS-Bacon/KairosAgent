@@ -1,4 +1,4 @@
-import { Phase, PhaseResult, CycleContext } from "../types.js";
+import { Phase, PhaseResult, CycleContext, Improvement } from "../types.js";
 import { CodeSearcher } from "./searcher.js";
 import { SearchQuery, SearchAnalysis } from "./types.js";
 import { logger } from "../../core/logger.js";
@@ -29,12 +29,16 @@ export class SearchPhase implements Phase {
     logger.debug("Searching for related code");
 
     // Prioritize issues over improvements
-    const target = context.issues[0] || context.improvements[0];
+    const issue = context.issues[0];
+    const improvement = context.improvements[0];
+    const isIssue = !!issue;
+    const targetFile = isIssue ? issue.file : improvement.file;
+    const targetText = isIssue ? issue.message : improvement.description;
 
     const query: SearchQuery = {
-      target: target.message || (target as any).description,
-      type: context.issues.length > 0 ? "error" : "improvement",
-      context: target.file,
+      target: targetText,
+      type: isIssue ? "error" : "improvement",
+      context: targetFile,
     };
 
     // 1. パターンベース検索（類似問題の解決策を参照）
@@ -42,7 +46,10 @@ export class SearchPhase implements Phase {
     try {
       await ruleEngine.initialize();
       patternResults = ruleEngine.findSimilarSolutions([
-        { message: target.message, description: (target as any).description },
+        {
+          message: isIssue ? issue.message : undefined,
+          description: isIssue ? undefined : improvement.description,
+        },
       ]);
 
       if (patternResults.length > 0) {
@@ -63,8 +70,8 @@ export class SearchPhase implements Phase {
     const analysis = await this.searcher.search(query);
 
     // If we have a specific file, also get its dependencies
-    if (target.file) {
-      const deps = await this.searcher.findDependencies(target.file);
+    if (targetFile) {
+      const deps = await this.searcher.findDependencies(targetFile);
       for (const dep of deps) {
         if (!analysis.relatedFiles.includes(dep)) {
           analysis.relatedFiles.push(dep);

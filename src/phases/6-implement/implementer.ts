@@ -10,6 +10,8 @@ import { logger } from "../../core/logger.js";
 import { eventBus } from "../../core/event-bus.js";
 import { troubleCollector } from "../../trouble/index.js";
 import { CodeSanitizer } from "../../ai/code-sanitizer.js";
+import { isLargeCode, extractRelevantContext, buildDiffPrompt } from "../../ai/token-estimator.js";
+import { applyPatch, parsePatch } from "diff";
 
 /** 構文エラー時のリトライ設定 */
 const SYNTAX_RETRY_CONFIG = {
@@ -56,28 +58,38 @@ export class CodeImplementer {
       );
 
       if (conditionallyProtectedFiles.length > 0) {
-        logger.info("Conditionally protected files detected, requesting AI review", {
+        logger.info("Conditionally protected files detected, requesting trial system review", {
           files: conditionallyProtectedFiles,
         });
 
-        // AI Providerを初期化（まだの場合）
-        guard.initializeAIProviders();
+        const changeDesc = plan.description || `Plan ${plan.id}: ${plan.targetIssue?.message || plan.targetImprovement?.description || "Unknown"}`;
 
-        const reviewResult = await guard.reviewProtectedFileChange(
-          conditionallyProtectedFiles[0],
-          plan.description || `Plan ${plan.id}: ${plan.targetIssue?.message || plan.targetImprovement?.description || "Unknown"}`
-        );
+        // 三審制レビュー: 全件に対して実施
+        let trialResult = { approved: true, trialsCompleted: 0, trialHistory: [] as unknown[], finalReason: "" };
+        for (const protectedFile of conditionallyProtectedFiles) {
+          const result = await guard.reviewWithTrialSystem(
+            protectedFile,
+            changeDesc
+          );
+          if (!result.approved) {
+            trialResult = result;
+            break;
+          }
+          trialResult = result;
+        }
 
-        if (reviewResult.approved) {
-          logger.info("Protected file change approved by AI review", {
+        if (trialResult.approved) {
+          logger.info("Protected file change approved by trial system", {
             files: conditionallyProtectedFiles,
-            reason: reviewResult.reason,
+            trialsCompleted: trialResult.trialsCompleted,
+            reason: trialResult.finalReason,
           });
           // 続行を許可（validationを上書き）
         } else {
-          logger.warn("Protected file change rejected by AI review - skipping plan", {
+          logger.warn("Protected file change rejected by trial system - skipping plan", {
             files: conditionallyProtectedFiles,
-            reason: reviewResult.reason,
+            trialsCompleted: trialResult.trialsCompleted,
+            reason: trialResult.finalReason,
           });
           // success: trueでスキップ（サイクル失敗にしない）
           return {
@@ -86,7 +98,12 @@ export class CodeImplementer {
             snapshotId: "",
             success: true,  // サイクルは成功扱い
             skipped: true,  // スキップされたことを示す
-            skipReason: `Protected file change rejected: ${reviewResult.reason}`,
+            skipReason: `Trial system rejected (${trialResult.trialsCompleted}審完了): ${trialResult.finalReason}`,
+            appealHistory: {
+              trialsCompleted: trialResult.trialsCompleted,
+              approved: false,
+              finalReason: trialResult.finalReason,
+            },
           };
         }
       } else {
@@ -286,6 +303,33 @@ export class CodeImplementer {
     }
   }
 
+  /**
+   * 差分ベースの変更適用を試みる
+   * AI出力がunified diff形式の場合、jsdiffでパッチ適用
+   */
+  private applyTargetedChange(
+    original: string,
+    aiOutput: string,
+  ): { success: boolean; result: string; method: string } {
+    // unified diff形式の検出
+    if (aiOutput.includes("---") && aiOutput.includes("+++") && aiOutput.includes("@@")) {
+      try {
+        const patches = parsePatch(aiOutput);
+        if (patches.length > 0) {
+          const patched = applyPatch(original, patches[0]);
+          if (patched !== false) {
+            return { success: true, result: patched, method: "diff-patch" };
+          }
+        }
+      } catch {
+        logger.debug("Diff patch application failed, falling back to full replacement");
+      }
+    }
+
+    // diff適用失敗時はAI出力をそのまま使用（全体置換）
+    return { success: true, result: aiOutput, method: "full-replacement" };
+  }
+
   private async modifyFile(
     filePath: string,
     details: string,
@@ -301,11 +345,29 @@ export class CodeImplementer {
 
       const issue = plan.targetIssue?.message || plan.targetImprovement?.description;
 
+      // 大規模ファイル（32K文字超）は差分ベースプロンプトに切替
+      let effectivePrompt: string;
+      let effectiveContext: CodeContext;
+
+      if (isLargeCode(originalContent)) {
+        logger.info("Large file detected, using diff-based prompt", {
+          file: filePath,
+          size: originalContent.length,
+        });
+
+        const relevantContext = extractRelevantContext(originalContent);
+        effectivePrompt = buildDiffPrompt(filePath, relevantContext, issue || "", details);
+        effectiveContext = { file: filePath, issue };
+      } else {
+        effectivePrompt = `${details}\nFix this issue: ${issue}`;
+        effectiveContext = { file: filePath, existingCode: originalContent, issue };
+      }
+
       // リトライループ：構文エラー時にフィードバックして再生成
       const generateResult = await this.generateCodeWithRetry(
         ai,
-        `${details}\nFix this issue: ${issue}`,
-        { file: filePath, existingCode: originalContent, issue },
+        effectivePrompt,
+        effectiveContext,
         filePath,
         "modify"
       );
@@ -320,7 +382,17 @@ export class CodeImplementer {
         };
       }
 
-      const newContent = generateResult.code;
+      let newContent = generateResult.code;
+
+      // 大規模ファイルの場合、差分適用を試みる
+      if (isLargeCode(originalContent)) {
+        const patchResult = this.applyTargetedChange(originalContent, newContent);
+        newContent = patchResult.result;
+        logger.info("Diff application", {
+          file: filePath,
+          method: patchResult.method,
+        });
+      }
 
       // 制御文字チェックはgenerateCodeWithRetry内で実行済み
 

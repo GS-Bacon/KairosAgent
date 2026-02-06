@@ -4,9 +4,13 @@
  * トラブル履歴をworkspace/troubles.jsonに永続化
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
+import { atomicWriteFile } from "../utils/atomic-write.js";
+import { safeJsonParse } from "../utils/safe-json.js";
+import { TroubleStoreSchema } from "../utils/schemas.js";
+import { STORAGE } from "../config/constants.js";
 import {
   Trouble,
   TroubleFilter,
@@ -22,19 +26,32 @@ interface TroubleStore {
 }
 
 const TROUBLE_FILE = join(process.cwd(), "workspace", "troubles.json");
+const TROUBLE_ARCHIVE_DIR = join(process.cwd(), "workspace", "troubles-archive");
+const MAX_ACTIVE_TROUBLES = STORAGE.MAX_ACTIVE_TROUBLES;
 
 class TroubleRepository {
   private troubles: Trouble[] = [];
   private loaded: boolean = false;
+  private loadingPromise: Promise<void> | null = null;
 
   async load(): Promise<void> {
     if (this.loaded) return;
+    if (this.loadingPromise) return this.loadingPromise;
 
+    this.loadingPromise = this._doLoad();
+    try {
+      await this.loadingPromise;
+    } finally {
+      this.loadingPromise = null;
+    }
+  }
+
+  private async _doLoad(): Promise<void> {
     try {
       if (existsSync(TROUBLE_FILE)) {
         const content = await readFile(TROUBLE_FILE, "utf-8");
-        const store: TroubleStore = JSON.parse(content);
-        this.troubles = store.troubles || [];
+        const store = safeJsonParse(content, TroubleStoreSchema, "troubles.json");
+        this.troubles = store?.troubles || [];
       }
     } catch (error) {
       console.warn("Failed to load troubles.json, starting fresh:", error);
@@ -45,18 +62,50 @@ class TroubleRepository {
   }
 
   async save(): Promise<void> {
+    // ローテーション: MAX_ACTIVE_TROUBLESを超過した場合はアーカイブ
+    await this.rotate();
+
     const store: TroubleStore = {
       version: 1,
       troubles: this.troubles,
       lastUpdated: new Date().toISOString(),
     };
 
-    const dir = dirname(TROUBLE_FILE);
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true });
+    await atomicWriteFile(TROUBLE_FILE, JSON.stringify(store, null, 2));
+  }
+
+  /**
+   * MAX_ACTIVE_TROUBLES超過分をアーカイブに移動
+   */
+  private async rotate(): Promise<void> {
+    if (this.troubles.length <= MAX_ACTIVE_TROUBLES) return;
+
+    // 日付でソート（新しい順）
+    const sorted = [...this.troubles].sort(
+      (a, b) => b.occurredAt.localeCompare(a.occurredAt)
+    );
+
+    // アクティブに残すもの
+    const active = sorted.slice(0, MAX_ACTIVE_TROUBLES);
+    // アーカイブ対象
+    const toArchive = sorted.slice(MAX_ACTIVE_TROUBLES);
+
+    if (toArchive.length === 0) return;
+
+    // アーカイブディレクトリ作成
+    if (!existsSync(TROUBLE_ARCHIVE_DIR)) {
+      await mkdir(TROUBLE_ARCHIVE_DIR, { recursive: true });
     }
 
-    await writeFile(TROUBLE_FILE, JSON.stringify(store, null, 2));
+    // アーカイブファイルに追記
+    const archiveFile = join(
+      TROUBLE_ARCHIVE_DIR,
+      `archive-${new Date().toISOString().split("T")[0]}.json`
+    );
+    await atomicWriteFile(archiveFile, JSON.stringify(toArchive, null, 2));
+
+    this.troubles = active;
+    console.warn(`Archived ${toArchive.length} troubles (active: ${active.length})`);
   }
 
   async add(trouble: Trouble): Promise<void> {

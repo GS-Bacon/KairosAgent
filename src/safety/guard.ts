@@ -1,6 +1,10 @@
 import { logger } from "../core/logger.js";
 import { ClaudeProvider } from "../ai/claude-provider.js";
 import { OpenCodeProvider } from "../ai/opencode-provider.js";
+import { parseJSONObject } from "../ai/json-parser.js";
+import { AppealManager } from "./appeal-manager.js";
+import { TrialSystemResult } from "./review-types.js";
+import { atomicWriteFileSync } from "../utils/atomic-write.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -80,6 +84,7 @@ export class Guard {
   private claudeProvider: ClaudeProvider | null = null;
   private openCodeProvider: OpenCodeProvider | null = null;
   private reviewLog: AIReviewResult[] = [];
+  private appealManager: AppealManager | null = null;
 
   constructor(config: Partial<GuardConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -101,11 +106,7 @@ export class Guard {
   private saveReviewLog(): void {
     try {
       const logPath = path.resolve(this.config.aiReviewLogPath);
-      const dir = path.dirname(logPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(logPath, JSON.stringify(this.reviewLog, null, 2));
+      atomicWriteFileSync(logPath, JSON.stringify(this.reviewLog, null, 2));
     } catch (err) {
       logger.warn("Failed to save AI review log", { error: err });
     }
@@ -214,9 +215,9 @@ JSONのみを出力してください。`;
     if (this.claudeProvider) {
       try {
         const claudeResponse = await this.claudeProvider.chat(prompt);
-        const match = claudeResponse.match(/\{[\s\S]*\}/);
-        if (match) {
-          claudeVerdict = JSON.parse(match[0]);
+        const parsed = parseJSONObject<{ approved: boolean; reason: string }>(claudeResponse);
+        if (parsed) {
+          claudeVerdict = parsed;
           logger.info("Claude protected file review", {
             file: filePath,
             verdict: claudeVerdict,
@@ -361,9 +362,9 @@ JSONのみを出力してください。`;
     if (this.claudeProvider) {
       try {
         const claudeResponse = await this.claudeProvider.chat(prompt);
-        const match = claudeResponse.match(/\{[\s\S]*\}/);
-        if (match) {
-          claudeVerdict = JSON.parse(match[0]);
+        const parsed = parseJSONObject<{ approved: boolean; reason: string }>(claudeResponse);
+        if (parsed) {
+          claudeVerdict = parsed;
           logger.info("Claude security review", { verdict: claudeVerdict });
         }
       } catch (err) {
@@ -375,9 +376,9 @@ JSONのみを出力してください。`;
     if (this.openCodeProvider) {
       try {
         const openCodeResponse = await this.openCodeProvider.chat(prompt);
-        const match = openCodeResponse.match(/\{[\s\S]*\}/);
-        if (match) {
-          openCodeVerdict = JSON.parse(match[0]);
+        const parsed = parseJSONObject<{ approved: boolean; reason: string }>(openCodeResponse);
+        if (parsed) {
+          openCodeVerdict = parsed;
           logger.info("OpenCode security review", { verdict: openCodeVerdict });
         }
       } catch (err) {
@@ -490,6 +491,59 @@ JSONのみを出力してください。`;
     }
   }
 
+  /**
+   * 三審制レビューフロー
+   * 条件付き保護ファイルへの変更に対して、最大3回の審理を行う。
+   * 既存のreviewProtectedFileChange()は後方互換性のため維持。
+   */
+  async reviewWithTrialSystem(
+    filePath: string,
+    changeDescription: string,
+    proposedCode?: string
+  ): Promise<TrialSystemResult> {
+    if (!this.config.aiReviewEnabled) {
+      return {
+        approved: false,
+        trialsCompleted: 0,
+        trialHistory: [],
+        finalReason: "AI review disabled",
+      };
+    }
+
+    if (!this.appealManager) {
+      this.appealManager = new AppealManager();
+    }
+
+    const result = await this.appealManager.runTrialSystem(
+      filePath,
+      changeDescription,
+      proposedCode
+    );
+
+    // レビューログに記録
+    const logEntry: AIReviewResult = {
+      timestamp: new Date().toISOString(),
+      code: proposedCode || changeDescription,
+      codeLength: proposedCode?.length || changeDescription.length,
+      warnings: [`Trial system review: ${filePath}`],
+      context: `三審制レビュー（${result.trialsCompleted}審完了）: ${changeDescription}`,
+      dangerousPatterns: [],
+      claudeVerdict: result.trialHistory.length > 0
+        ? {
+            approved: result.approved,
+            reason: result.finalReason,
+          }
+        : null,
+      openCodeVerdict: null,
+      finalDecision: result.approved ? "approved" : "rejected",
+      decisionReason: result.finalReason,
+    };
+    this.reviewLog.push(logEntry);
+    this.saveReviewLog();
+
+    return result;
+  }
+
   getOpenCodeTrustScore(): number {
     // 過去のレビューからOpenCodeの信頼性を計算
     const recentReviews = this.reviewLog.slice(-20);
@@ -525,7 +579,24 @@ JSONのみを出力してください。`;
     return { ...this.config };
   }
 
+  /** 変更不可フィールド（API経由での変更を禁止） */
+  private static readonly IMMUTABLE_FIELDS: (keyof GuardConfig)[] = [
+    "aiReviewEnabled",
+    "strictlyProtectedPatterns",
+    "conditionallyProtectedPatterns",
+    "protectedPatterns",
+    "allowedExtensions",
+  ];
+
   updateConfig(updates: Partial<GuardConfig>): void {
+    // 不変フィールドの変更を阻止
+    for (const field of Guard.IMMUTABLE_FIELDS) {
+      if (field in updates) {
+        logger.warn("Attempt to modify immutable guard config field blocked", { field });
+        delete (updates as Record<string, unknown>)[field];
+      }
+    }
+
     this.config = { ...this.config, ...updates };
     logger.info("Guard config updated", { config: this.config });
   }

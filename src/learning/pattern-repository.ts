@@ -15,6 +15,10 @@ import {
   isDeprecationCandidate,
 } from "./types.js";
 import { logger } from "../core/logger.js";
+import { atomicWriteFileSync } from "../utils/atomic-write.js";
+import { safeJsonParse } from "../utils/safe-json.js";
+import { PatternsDataSchema } from "../utils/schemas.js";
+import { STORAGE } from "../config/constants.js";
 
 const WORKSPACE_DIR = path.join(process.cwd(), "workspace");
 const PATTERNS_FILE = path.join(WORKSPACE_DIR, "patterns.json");
@@ -72,9 +76,12 @@ export class PatternRepository {
       return;
     }
 
-    const data = JSON.parse(fs.readFileSync(PATTERNS_FILE, "utf-8")) as PatternsData;
-    for (const pattern of data.patterns) {
-      this.patterns.set(pattern.id, pattern);
+    const content = fs.readFileSync(PATTERNS_FILE, "utf-8");
+    const data = safeJsonParse(content, PatternsDataSchema, "patterns.json");
+    if (data) {
+      for (const pattern of data.patterns) {
+        this.patterns.set(pattern.id, pattern);
+      }
     }
   }
 
@@ -106,13 +113,13 @@ export class PatternRepository {
       fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
     }
 
-    fs.writeFileSync(PATTERNS_FILE, JSON.stringify(data, null, 2));
+    atomicWriteFileSync(PATTERNS_FILE, JSON.stringify(data, null, 2));
     logger.debug("Patterns saved", { count: this.patterns.size });
   }
 
   private async saveStats(): Promise<void> {
     this.stats.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(STATS_FILE, JSON.stringify(this.stats, null, 2));
+    atomicWriteFileSync(STATS_FILE, JSON.stringify(this.stats, null, 2));
   }
 
   /**
@@ -321,6 +328,11 @@ export class PatternRepository {
       timestamp: new Date().toISOString(),
       changeReason,
     });
+
+    // history上限
+    if (pattern.history.length > STORAGE.PATTERN_HISTORY_MAX) {
+      pattern.history = pattern.history.slice(-STORAGE.PATTERN_HISTORY_MAX);
+    }
 
     this.patterns.set(id, pattern);
   }

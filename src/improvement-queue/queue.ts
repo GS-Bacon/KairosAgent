@@ -4,9 +4,13 @@
  * 改善提案を優先度付きキューで管理
  */
 
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile } from "fs/promises";
 import { existsSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
+import { atomicWriteFile } from "../utils/atomic-write.js";
+import { safeJsonParse } from "../utils/safe-json.js";
+import { QueueStoreSchema } from "../utils/schemas.js";
+import { STORAGE } from "../config/constants.js";
 
 import {
   QueuedImprovement,
@@ -25,15 +29,26 @@ const QUEUE_FILE = join(process.cwd(), "workspace", "improvement-queue.json");
 class ImprovementQueue {
   private queue: QueuedImprovement[] = [];
   private loaded: boolean = false;
+  private loadingPromise: Promise<void> | null = null;
 
   async load(): Promise<void> {
     if (this.loaded) return;
+    if (this.loadingPromise) return this.loadingPromise;
 
+    this.loadingPromise = this._doLoad();
+    try {
+      await this.loadingPromise;
+    } finally {
+      this.loadingPromise = null;
+    }
+  }
+
+  private async _doLoad(): Promise<void> {
     try {
       if (existsSync(QUEUE_FILE)) {
         const content = await readFile(QUEUE_FILE, "utf-8");
-        const store: QueueStore = JSON.parse(content);
-        this.queue = store.queue || [];
+        const store = safeJsonParse(content, QueueStoreSchema, "improvement-queue.json");
+        this.queue = store?.queue || [];
       }
     } catch (error) {
       logger.warn("Failed to load improvement-queue.json, starting fresh:", { error });
@@ -50,12 +65,7 @@ class ImprovementQueue {
       lastUpdated: new Date().toISOString(),
     };
 
-    const dir = dirname(QUEUE_FILE);
-    if (!existsSync(dir)) {
-      await mkdir(dir, { recursive: true });
-    }
-
-    await writeFile(QUEUE_FILE, JSON.stringify(store, null, 2));
+    await atomicWriteFile(QUEUE_FILE, JSON.stringify(store, null, 2));
   }
 
   /**
@@ -71,7 +81,7 @@ class ImprovementQueue {
       type: input.type,
       title: input.title,
       description: input.description,
-      priority: input.priority ?? 50,
+      priority: input.priority ?? STORAGE.DEFAULT_IMPROVEMENT_PRIORITY,
       status: "pending",
       metadata: input.metadata,
       relatedFile: input.relatedFile,

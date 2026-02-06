@@ -63,6 +63,7 @@ export interface ConfigResponse {
   };
   scheduler: {
     interval: number;
+    maxRetries: number;
     retryState?: {
       consecutiveFailures: number;
       maxRetries: number;
@@ -127,10 +128,10 @@ export interface CycleSummary {
   issueCount: number;
   changeCount: number;
   troubleCount: number;
-  cycleType?: CycleType;              // サイクルの種類
-  researchTopic?: string;             // リサーチの場合のトピック
-  findingsCount?: number;             // リサーチの場合の発見数
-  approachesCount?: number;           // リサーチの場合のアプローチ数
+  cycleType?: CycleType;
+  researchTopic?: string;
+  findingsCount?: number;
+  approachesCount?: number;
 }
 
 export interface CycleDetail {

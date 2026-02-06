@@ -16,19 +16,31 @@ import { GLMProvider } from "./glm-provider.js";
 import { logger } from "../core/logger.js";
 import { changeTracker } from "./change-tracker.js";
 import { confirmationQueue } from "./confirmation-queue.js";
+import { RATE_LIMIT } from "../config/constants.js";
+
+type CircuitState = "closed" | "open" | "half-open";
 
 interface RateLimitState {
   isRateLimited: boolean;
   limitedAt?: Date;
   retryAfter?: number;  // ms
+  consecutiveFailures: number;
+  circuitState: CircuitState;
+  lastFailureAt?: Date;
 }
 
 export class ResilientAIProvider implements AIProvider {
   name: string;
   private primaryProvider: AIProvider;
   private fallbackProvider: GLMProvider | null;
-  private rateLimitState: RateLimitState = { isRateLimited: false };
+  private rateLimitState: RateLimitState = {
+    isRateLimited: false,
+    consecutiveFailures: 0,
+    circuitState: "closed",
+  };
   private currentPhase: string = "unknown";
+  private static readonly BASE_BACKOFF_MS = RATE_LIMIT.BASE_BACKOFF_MS;
+  private static readonly MAX_BACKOFF_MS = RATE_LIMIT.MAX_BACKOFF_MS;
 
   constructor(primaryProvider: AIProvider, glmApiKey?: string) {
     this.primaryProvider = primaryProvider;
@@ -73,18 +85,50 @@ export class ResilientAIProvider implements AIProvider {
   }
 
   /**
-   * レートリミットを記録
+   * レートリミットを記録（指数バックオフ付き）
    */
-  private recordRateLimit(retryAfterMs: number = 60000): void {
-    this.rateLimitState = {
-      isRateLimited: true,
-      limitedAt: new Date(),
-      retryAfter: retryAfterMs,
-    };
+  private recordRateLimit(): void {
+    this.rateLimitState.consecutiveFailures++;
+    this.rateLimitState.isRateLimited = true;
+    this.rateLimitState.limitedAt = new Date();
+    this.rateLimitState.lastFailureAt = new Date();
+
+    // 指数バックオフ: 5s × 2^(failures-1), max 300s
+    const backoff = Math.min(
+      ResilientAIProvider.BASE_BACKOFF_MS * Math.pow(2, this.rateLimitState.consecutiveFailures - 1),
+      ResilientAIProvider.MAX_BACKOFF_MS,
+    );
+    this.rateLimitState.retryAfter = backoff;
+
+    // Circuit Breaker: 3回連続失敗でOpen
+    if (this.rateLimitState.consecutiveFailures >= RATE_LIMIT.CIRCUIT_BREAKER_THRESHOLD) {
+      this.rateLimitState.circuitState = "open";
+      logger.warn("Circuit breaker opened for primary provider", {
+        consecutiveFailures: this.rateLimitState.consecutiveFailures,
+        backoffMs: backoff,
+      });
+    }
+
     logger.warn("Primary provider rate limited", {
-      retryAfter: retryAfterMs,
+      retryAfter: backoff,
+      consecutiveFailures: this.rateLimitState.consecutiveFailures,
+      circuitState: this.rateLimitState.circuitState,
       provider: this.primaryProvider.name,
     });
+  }
+
+  /**
+   * 成功時にcircuit breakerをリセット
+   */
+  private recordSuccess(): void {
+    if (this.rateLimitState.consecutiveFailures > 0) {
+      logger.info("Primary provider recovered", {
+        previousFailures: this.rateLimitState.consecutiveFailures,
+      });
+    }
+    this.rateLimitState.consecutiveFailures = 0;
+    this.rateLimitState.circuitState = "closed";
+    this.rateLimitState.isRateLimited = false;
   }
 
   /**
@@ -114,12 +158,15 @@ export class ResilientAIProvider implements AIProvider {
       logger.debug("Using fallback provider (rate limited)", {
         operation: context.operation,
         phase: this.currentPhase,
+        circuitState: this.rateLimitState.circuitState,
       });
       return this.executeWithTracking(fallbackOp, context);
     }
 
     try {
-      return await primaryOp();
+      const result = await primaryOp();
+      this.recordSuccess();
+      return result;
     } catch (error) {
       // レートリミットエラーの場合、フォールバック
       if (this.isRateLimitError(error) && this.fallbackProvider) {
@@ -129,6 +176,12 @@ export class ResilientAIProvider implements AIProvider {
           phase: this.currentPhase,
         });
         return this.executeWithTracking(fallbackOp, context);
+      }
+
+      // フォールバックがない場合の明示的エラー
+      if (this.isRateLimitError(error) && !this.fallbackProvider) {
+        this.recordRateLimit();
+        throw new Error(`Primary provider rate limited and no fallback available: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       // その他のエラーはそのまま投げる
@@ -155,7 +208,7 @@ export class ResilientAIProvider implements AIProvider {
     });
 
     // 確認キューに追加
-    await confirmationQueue.addFromChange(changeId, 50);  // 中優先度
+    await confirmationQueue.addFromChange(changeId, RATE_LIMIT.FALLBACK_CONFIRMATION_PRIORITY);
 
     return result;
   }
@@ -224,7 +277,11 @@ export class ResilientAIProvider implements AIProvider {
    * レートリミットをクリア（手動復旧用）
    */
   clearRateLimit(): void {
-    this.rateLimitState = { isRateLimited: false };
+    this.rateLimitState = {
+      isRateLimited: false,
+      consecutiveFailures: 0,
+      circuitState: "closed",
+    };
     logger.info("Rate limit state cleared manually");
   }
 }

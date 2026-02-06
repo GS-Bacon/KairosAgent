@@ -3,6 +3,7 @@ import { ClaudeProvider } from "./claude-provider.js";
 import { OpenCodeProvider } from "./opencode-provider.js";
 import { eventBus, CriticalAlert } from "../core/event-bus.js";
 import { logger } from "../core/logger.js";
+import { PROVIDER_HEALTH } from "../config/constants.js";
 
 export type ProviderStatus = "healthy" | "degraded" | "broken";
 
@@ -22,9 +23,9 @@ interface HealthMonitorConfig {
 }
 
 const DEFAULT_CONFIG: HealthMonitorConfig = {
-  failureThreshold: 3,
-  degradedThreshold: 1,
-  repairCooldown: 300000,
+  failureThreshold: PROVIDER_HEALTH.FAILURE_THRESHOLD,
+  degradedThreshold: PROVIDER_HEALTH.DEGRADED_THRESHOLD,
+  repairCooldown: PROVIDER_HEALTH.REPAIR_COOLDOWN_MS,
 };
 
 export class ProviderHealthMonitor {
@@ -322,7 +323,7 @@ Please analyze this error and suggest a fix. If this is a configuration or integ
       // 最後の失敗から5分以上経過している場合のみテスト
       if (health.lastFailure) {
         const elapsed = Date.now() - health.lastFailure.getTime();
-        if (elapsed < 5 * 60 * 1000) {
+        if (elapsed < PROVIDER_HEALTH.RECOVERY_CHECK_INTERVAL_MS) {
           continue;
         }
       }
@@ -398,10 +399,16 @@ export function initializeHealthMonitor(
     clearInterval(recoveryCheckInterval);
   }
   recoveryCheckInterval = setInterval(async () => {
-    if (globalHealthMonitor) {
-      await globalHealthMonitor.checkBrokenProviderRecovery();
+    try {
+      if (globalHealthMonitor) {
+        await globalHealthMonitor.checkBrokenProviderRecovery();
+      }
+    } catch (err) {
+      logger.error("Provider recovery check failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-  }, 5 * 60 * 1000);
+  }, PROVIDER_HEALTH.RECOVERY_CHECK_INTERVAL_MS);
 
   return globalHealthMonitor;
 }

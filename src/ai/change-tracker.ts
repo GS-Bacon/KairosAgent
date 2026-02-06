@@ -4,10 +4,12 @@
  * GLMによる変更を記録し、Claude復活時のレビューに備える
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { existsSync, readFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { logger } from "../core/logger.js";
+import { atomicWriteFileSync } from "../utils/atomic-write.js";
+import { safeJsonParse } from "../utils/safe-json.js";
+import { TrackedChangesArraySchema } from "../utils/schemas.js";
 
 export interface ReviewResult {
   approved: boolean;
@@ -37,7 +39,7 @@ export class ChangeTracker {
   }
 
   /**
-   * 永続化データをロード
+   * 永続化データをロード（同期版、ミューテックス付き）
    */
   private load(): void {
     if (this.loaded) {
@@ -47,8 +49,8 @@ export class ChangeTracker {
     try {
       if (existsSync(this.storagePath)) {
         const content = readFileSync(this.storagePath, "utf-8");
-        const data = JSON.parse(content);
-        this.changes = Array.isArray(data) ? data : [];
+        const data = safeJsonParse(content, TrackedChangesArraySchema, "glm-changes.json");
+        this.changes = data || [];
       }
     } catch (err) {
       logger.warn("Failed to load GLM changes", {
@@ -65,12 +67,7 @@ export class ChangeTracker {
    */
   private save(): void {
     try {
-      const dir = dirname(this.storagePath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-
-      writeFileSync(this.storagePath, JSON.stringify(this.changes, null, 2));
+      atomicWriteFileSync(this.storagePath, JSON.stringify(this.changes, null, 2));
     } catch (err) {
       logger.error("Failed to save GLM changes", {
         error: err instanceof Error ? err.message : String(err),

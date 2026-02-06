@@ -11,4 +11,4 @@ export {
   collectFromFrequentPatterns,
   enqueueFromPhase,
 } from "./collectors/index.js";
-export { improvementReviewer, ImprovementReviewer, ReviewResult } from "./reviewer.js";
+export { improvementReviewer, ImprovementReviewer, type ReviewResult } from "./reviewer.js";

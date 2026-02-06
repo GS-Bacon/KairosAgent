@@ -1,5 +1,6 @@
 import { logger } from "./logger.js";
 import { CycleResult } from "../phases/types.js";
+import { RETRY } from "../config/constants.js";
 
 /**
  * 即時再実行の状態管理
@@ -28,7 +29,7 @@ export class Scheduler {
   private isRunning: boolean = false;
   private retryState: RetryState = {
     consecutiveFailures: 0,
-    maxRetries: 3,
+    maxRetries: RETRY.MAX_RETRIES,
   };
   private retryTimer: NodeJS.Timeout | null = null;
 
@@ -66,8 +67,22 @@ export class Scheduler {
 
   private async runTask(task: ScheduledTask): Promise<void> {
     if (task.isRunning) {
-      logger.warn(`Task ${task.name} is already running, skipping`);
-      return;
+      // ゴーストロック検知: lastRunが存在しない場合（初回実行中stuck）も対応
+      const stuckThreshold = task.interval * 3;
+      const lastRunTime = task.lastRun?.getTime() || 0;
+      const elapsed = Date.now() - lastRunTime;
+
+      if (elapsed > stuckThreshold) {
+        logger.warn(`Task ${task.name} appears stuck (ghost lock detected), forcing reset`, {
+          lastRun: task.lastRun?.toISOString() || "never",
+          elapsedMs: elapsed,
+          thresholdMs: stuckThreshold,
+        });
+        task.isRunning = false;
+      } else {
+        logger.warn(`Task ${task.name} is already running, skipping`);
+        return;
+      }
     }
 
     task.isRunning = true;
@@ -180,18 +195,18 @@ export class Scheduler {
       return;
     }
 
+    // 先にインクリメントしてからリトライ可能かチェック
+    this.retryState.consecutiveFailures++;
+    this.retryState.lastFailureReason = result.retryReason;
+    this.retryState.lastErrorCategory = currentCategory;
+
     // リトライ可能かチェック
     if (!this.canRetry()) {
       logger.info("Cannot retry, in cooldown or max retries reached");
       return;
     }
 
-    // 即時再実行をスケジュール
-    this.retryState.consecutiveFailures++;
-    this.retryState.lastFailureReason = result.retryReason;
-    this.retryState.lastErrorCategory = currentCategory;
-
-    // Exponential backoff: 5秒 × 2^(failures-1)、最大30分
+    // Exponential backoff: 5秒 × 2^(failures-1)、最大10分
     const backoffMs = this.calculateBackoff(this.retryState.consecutiveFailures);
 
     logger.info("Scheduling immediate retry with backoff", {
@@ -210,11 +225,11 @@ export class Scheduler {
 
   /**
    * Exponential backoff を計算
-   * 5秒 × 2^(failures-1)、最大30分
+   * 5秒 × 2^(failures-1)、最大10分
    */
   private calculateBackoff(failures: number): number {
-    const baseMs = 5000; // 5秒
-    const maxMs = 30 * 60 * 1000; // 30分
+    const baseMs = RETRY.SCHEDULER_BASE_BACKOFF_MS;
+    const maxMs = RETRY.SCHEDULER_MAX_BACKOFF_MS;
     const backoff = baseMs * Math.pow(2, failures - 1);
     return Math.min(backoff, maxMs);
   }
@@ -231,7 +246,7 @@ export class Scheduler {
       return false;
     }
 
-    // 最大リトライ回数に達したかチェック
+    // 最大リトライ回数に達したかチェック（インクリメント済みの値で比較）
     if (this.retryState.consecutiveFailures >= this.retryState.maxRetries) {
       this.enterCooldown();
       return false;
@@ -244,13 +259,16 @@ export class Scheduler {
    * クールダウン期間に入る
    */
   private enterCooldown(): void {
-    const cooldownMs = 30 * 60 * 1000; // 30分
+    const cooldownMs = RETRY.SCHEDULER_COOLDOWN_MS;
     this.retryState.cooldownUntil = new Date(Date.now() + cooldownMs);
-    this.retryState.consecutiveFailures = 0; // リセット
     logger.warn("Max retries reached, entering cooldown", {
       cooldownUntil: this.retryState.cooldownUntil,
       cooldownMinutes: cooldownMs / 60000,
+      lastFailureReason: this.retryState.lastFailureReason,
+      lastErrorCategory: this.retryState.lastErrorCategory,
+      consecutiveFailures: this.retryState.consecutiveFailures,
     });
+    this.retryState.consecutiveFailures = 0; // リセット
   }
 
   start(): void {
@@ -266,7 +284,11 @@ export class Scheduler {
       this.runTask(task);
 
       const timer = setInterval(() => {
-        this.runTask(task);
+        this.runTask(task).catch((err) => {
+          logger.error(`Scheduled task ${task.name} unhandled error`, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       }, task.interval);
 
       this.timers.set(task.id, timer);
@@ -318,7 +340,7 @@ export class Scheduler {
   resetRetryState(): void {
     this.retryState = {
       consecutiveFailures: 0,
-      maxRetries: 3,
+      maxRetries: RETRY.MAX_RETRIES,
       lastFailureReason: undefined,
       lastErrorCategory: undefined,
       cooldownUntil: undefined,

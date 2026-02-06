@@ -16,4 +16,9 @@ export interface ImplementationResult {
   success: boolean;
   skipped?: boolean;  // 保護ファイルのAIレビュー却下でスキップされた場合
   skipReason?: string;  // スキップの理由
+  appealHistory?: {
+    trialsCompleted: number;
+    approved: boolean;
+    finalReason: string;
+  };
 }

@@ -21,6 +21,7 @@ import { ChangeTracker, changeTracker } from "./change-tracker.js";
 import { ClaudeReviewer, claudeReviewer } from "./claude-reviewer.js";
 import { getRateLimiter } from "./rate-limiter.js";
 import { tokenTracker } from "./token-tracker.js";
+import { HYBRID_PROVIDER } from "../config/constants.js";
 
 export type PhaseName =
   | "health-check"
@@ -32,6 +33,11 @@ export type PhaseName =
   | "test-gen"
   | "verify";
 
+/**
+ * フェーズごとのプロバイダーマッピング
+ * Claude: 重要な判断・高品質コード生成（plan, implement）
+ * OpenCode: 探索・検証（health-check, error-detect, search等）
+ */
 const PHASE_PROVIDER_MAP: Record<PhaseName, "claude" | "opencode"> = {
   "health-check": "opencode",
   "error-detect": "opencode",
@@ -68,9 +74,9 @@ export class HybridProvider implements AIProvider {
     consecutiveLimits: 0,
   };
 
-  // バックオフ設定（指数関数的）
-  private readonly BASE_BACKOFF_MS = 60000; // 1分
-  private readonly MAX_BACKOFF_MS = 600000; // 10分
+  // バックオフ設定（指数関数的） — constants.tsから取得
+  private readonly BASE_BACKOFF_MS = HYBRID_PROVIDER.BASE_BACKOFF_MS;
+  private readonly MAX_BACKOFF_MS = HYBRID_PROVIDER.MAX_BACKOFF_MS;
 
   constructor() {
     this.claudeProvider = new ClaudeProvider();

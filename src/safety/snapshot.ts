@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync, rmdirSync, rmSync } from "fs";
-import { join, relative, dirname } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync, rmdirSync, rmSync, lstatSync, realpathSync } from "fs";
+import { join, relative, dirname, resolve } from "path";
 import { logger } from "../core/logger.js";
 
 export interface SnapshotStatus {
@@ -97,9 +97,40 @@ export class SnapshotManager {
   }
 
   restore(id: string): boolean {
+    // IDにパストラバーサルが含まれていないか検証
+    if (id.includes("..") || id.includes("/") || id.includes("\\")) {
+      logger.error("Invalid snapshot ID (path traversal attempt)", { id });
+      return false;
+    }
+
     const snapshotPath = join(this.snapshotDir, id);
+
+    // resolvedPathがsnapshotDir内か検証
+    const resolvedSnapshotDir = resolve(this.snapshotDir);
+    const resolvedSnapshotPath = resolve(snapshotPath);
+    if (!resolvedSnapshotPath.startsWith(resolvedSnapshotDir + "/")) {
+      logger.error("Snapshot path traversal blocked", {
+        id,
+        resolvedPath: resolvedSnapshotPath,
+        expectedPrefix: resolvedSnapshotDir,
+      });
+      return false;
+    }
+
     if (!existsSync(snapshotPath)) {
       logger.error("Snapshot not found", { id });
+      return false;
+    }
+
+    // シンボリックリンクチェック
+    try {
+      const stat = lstatSync(snapshotPath);
+      if (stat.isSymbolicLink()) {
+        logger.error("Snapshot is a symbolic link (blocked)", { id });
+        return false;
+      }
+    } catch {
+      logger.error("Failed to stat snapshot", { id });
       return false;
     }
 
@@ -111,8 +142,18 @@ export class SnapshotManager {
 
     const files = this.collectFilesFromSnapshot(snapshotPath);
 
+    const resolvedSrcDir = resolve(this.srcDir);
     for (const [relativePath, content] of files) {
       const targetPath = join(this.srcDir, relativePath);
+      // 復元先がsrcDir内か検証
+      const resolvedTarget = resolve(targetPath);
+      if (!resolvedTarget.startsWith(resolvedSrcDir + "/")) {
+        logger.error("Restore target path traversal blocked", {
+          relativePath,
+          resolvedTarget,
+        });
+        continue;
+      }
       const targetDir = dirname(targetPath);
       if (!existsSync(targetDir)) {
         mkdirSync(targetDir, { recursive: true });
@@ -178,8 +219,21 @@ export class SnapshotManager {
     const toDelete = snapshots.slice(this.maxSnapshots);
     for (const snap of toDelete) {
       const snapshotPath = join(this.snapshotDir, snap.id);
-      this.deleteDir(snapshotPath);
-      logger.info("Deleted old snapshot", { id: snap.id });
+      try {
+        // シンボリックリンクチェック
+        const stat = lstatSync(snapshotPath);
+        if (stat.isSymbolicLink()) {
+          logger.warn("Skipping symbolic link during cleanup", { id: snap.id });
+          continue;
+        }
+        this.deleteDir(snapshotPath);
+        logger.info("Deleted old snapshot", { id: snap.id });
+      } catch (err) {
+        logger.warn("Failed to delete snapshot during cleanup", {
+          id: snap.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

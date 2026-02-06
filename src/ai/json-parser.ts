@@ -9,6 +9,7 @@
  */
 
 import { logger } from "../core/logger.js";
+import { ZodType, ZodError } from "zod";
 
 export interface ParseResult<T> {
   success: boolean;
@@ -20,6 +21,8 @@ export interface ParseResult<T> {
 export interface ParseOptions<T> {
   type?: "object" | "array";
   validator?: (data: unknown) => data is T;
+  /** Zodスキーマによるバリデーション（validatorより優先） */
+  schema?: ZodType<T>;
 }
 
 /**
@@ -29,29 +32,51 @@ export function extractJSON<T = unknown>(
   response: string,
   options: ParseOptions<T> = {}
 ): ParseResult<T> {
-  const { type = "object", validator } = options;
+  const { type = "object", validator, schema } = options;
+
+  // バリデーション関数: schema優先、なければvalidator
+  const validate = (data: unknown): { ok: boolean; parsed?: T; error?: string } => {
+    if (schema) {
+      const result = schema.safeParse(data);
+      if (result.success) {
+        return { ok: true, parsed: result.data };
+      }
+      return { ok: false, error: formatZodError(result.error) };
+    }
+    if (validator) {
+      return validator(data) ? { ok: true, parsed: data as T } : { ok: false };
+    }
+    return { ok: true, parsed: data as T };
+  };
 
   // 1. マークダウンコードブロックを試す
   const codeBlockResult = extractFromCodeBlock<T>(response, type);
   if (codeBlockResult.success) {
-    if (!validator || validator(codeBlockResult.data)) {
-      return { ...codeBlockResult, method: "code-block" };
+    const v = validate(codeBlockResult.data);
+    if (v.ok) {
+      return { success: true, data: v.parsed, method: "code-block" };
     }
   }
 
   // 2. バランスの取れた括弧で抽出
   const balancedResult = extractWithBalancedBrackets<T>(response, type);
   if (balancedResult.success) {
-    if (!validator || validator(balancedResult.data)) {
-      return { ...balancedResult, method: "balanced-brackets" };
+    const v = validate(balancedResult.data);
+    if (v.ok) {
+      return { success: true, data: v.parsed, method: "balanced-brackets" };
     }
   }
 
   // 3. フォールバック: 改善版正規表現
   const regexResult = extractWithRegex<T>(response, type);
   if (regexResult.success) {
-    if (!validator || validator(regexResult.data)) {
-      return { ...regexResult, method: "regex-fallback" };
+    const v = validate(regexResult.data);
+    if (v.ok) {
+      return { success: true, data: v.parsed, method: "regex-fallback" };
+    }
+    // 最後の試行のバリデーションエラーを返す
+    if (v.error) {
+      return { success: false, error: `Schema validation failed: ${v.error}` };
     }
   }
 
@@ -60,6 +85,16 @@ export function extractJSON<T = unknown>(
     success: false,
     error: "Failed to extract valid JSON from response",
   };
+}
+
+/**
+ * ZodErrorをユーザーフレンドリーな文字列に変換
+ */
+function formatZodError(error: ZodError): string {
+  return error.issues
+    .map((i) => `${i.path.join(".")}: ${i.message}`)
+    .slice(0, 5)
+    .join("; ");
 }
 
 /**
@@ -198,9 +233,15 @@ function extractWithRegex<T>(
  */
 export function parseJSONObject<T = Record<string, unknown>>(
   response: string,
-  validator?: (data: unknown) => data is T
+  validatorOrSchema?: ((data: unknown) => data is T) | ZodType<T>
 ): T | null {
-  const result = extractJSON<T>(response, { type: "object", validator });
+  const opts: ParseOptions<T> = { type: "object" };
+  if (validatorOrSchema && "safeParse" in validatorOrSchema) {
+    opts.schema = validatorOrSchema;
+  } else if (validatorOrSchema) {
+    opts.validator = validatorOrSchema as (data: unknown) => data is T;
+  }
+  const result = extractJSON<T>(response, opts);
   if (!result.success) {
     logger.debug("JSON object extraction failed", { error: result.error });
     return null;
@@ -213,9 +254,15 @@ export function parseJSONObject<T = Record<string, unknown>>(
  */
 export function parseJSONArray<T = unknown[]>(
   response: string,
-  validator?: (data: unknown) => data is T
+  validatorOrSchema?: ((data: unknown) => data is T) | ZodType<T>
 ): T | null {
-  const result = extractJSON<T>(response, { type: "array", validator });
+  const opts: ParseOptions<T> = { type: "array" };
+  if (validatorOrSchema && "safeParse" in validatorOrSchema) {
+    opts.schema = validatorOrSchema;
+  } else if (validatorOrSchema) {
+    opts.validator = validatorOrSchema as (data: unknown) => data is T;
+  }
+  const result = extractJSON<T>(response, opts);
   if (!result.success) {
     logger.debug("JSON array extraction failed", { error: result.error });
     return null;

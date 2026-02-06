@@ -44,3 +44,6 @@ tmp/
 # CLI build
 cli/dist/
 cli/node_modules/
+
+# OpenCode local data
+.opencode/

@@ -8,13 +8,14 @@ import {
 } from "./provider.js";
 import { logger } from "../core/logger.js";
 import { parseJSONObject } from "./json-parser.js";
+import { OPENCODE } from "../config/constants.js";
 
 export class OpenCodeProvider implements AIProvider {
   name = "opencode";
   private maxTimeout: number;
 
   constructor(options: { maxTimeout?: number } = {}) {
-    this.maxTimeout = options.maxTimeout || 300000; // 5分（保険）
+    this.maxTimeout = options.maxTimeout || OPENCODE.MAX_TIMEOUT_MS;
   }
 
   /**
@@ -42,9 +43,17 @@ export class OpenCodeProvider implements AIProvider {
       });
 
       // 保険としての最大タイムアウト（5分）
+      let timedOut = false;
       const timeoutTimer = setTimeout(() => {
+        timedOut = true;
         logger.warn("OpenCode max timeout reached", { maxTimeout: this.maxTimeout });
         proc.kill("SIGTERM");
+        // SIGTERMで終了しない場合の保険としてSIGKILL
+        setTimeout(() => {
+          if (!proc.killed) {
+            proc.kill("SIGKILL");
+          }
+        }, 5000);
       }, this.maxTimeout);
 
       // 終了検出（closeイベント：即座に検出）
@@ -52,7 +61,9 @@ export class OpenCodeProvider implements AIProvider {
         clearTimeout(timeoutTimer);
         const duration = Date.now() - startTime;
 
-        if (code !== 0) {
+        if (timedOut) {
+          reject(new Error(`OpenCode timed out after ${this.maxTimeout}ms`));
+        } else if (code !== 0) {
           logger.error("OpenCode execution failed", { code, stderr, duration });
           reject(new Error(`OpenCode exited with code ${code}: ${stderr.slice(0, 200)}`));
         } else {

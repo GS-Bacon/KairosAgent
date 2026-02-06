@@ -5,10 +5,12 @@
  * Claude復活時にレビューするためのキュー
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { existsSync, readFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { logger } from "../core/logger.js";
+import { atomicWriteFileSync } from "../utils/atomic-write.js";
+import { safeJsonParse } from "../utils/safe-json.js";
+import { ConfirmationItemsArraySchema } from "../utils/schemas.js";
 
 export interface ConfirmationItem {
   id: string;
@@ -30,7 +32,7 @@ export class ConfirmationQueue {
   }
 
   /**
-   * 永続化データをロード
+   * 永続化データをロード（ミューテックス付き）
    */
   private load(): void {
     if (this.loaded) {
@@ -40,8 +42,8 @@ export class ConfirmationQueue {
     try {
       if (existsSync(this.storagePath)) {
         const content = readFileSync(this.storagePath, "utf-8");
-        const data = JSON.parse(content);
-        this.items = Array.isArray(data) ? data : [];
+        const data = safeJsonParse(content, ConfirmationItemsArraySchema, "confirmation-queue.json");
+        this.items = data || [];
       }
     } catch (err) {
       logger.warn("Failed to load confirmation queue", {
@@ -58,12 +60,7 @@ export class ConfirmationQueue {
    */
   private save(): void {
     try {
-      const dir = dirname(this.storagePath);
-      if (!existsSync(dir)) {
-        mkdirSync(dir, { recursive: true });
-      }
-
-      writeFileSync(this.storagePath, JSON.stringify(this.items, null, 2));
+      atomicWriteFileSync(this.storagePath, JSON.stringify(this.items, null, 2));
     } catch (err) {
       logger.error("Failed to save confirmation queue", {
         error: err instanceof Error ? err.message : String(err),

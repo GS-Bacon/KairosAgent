@@ -213,6 +213,8 @@ export function createFullCycleContext(options?: {
  * サイクル実行結果
  * Orchestratorが返す、スケジューラーが即時再実行判断に使用
  */
+export type CycleQuality = "effective" | "no-op" | "partial" | "failed";
+
 export interface CycleResult {
   cycleId: string;
   success: boolean;
@@ -222,4 +224,5 @@ export interface CycleResult {
   retryReason?: string;      // 再実行理由
   failedPhase?: string;      // 失敗したフェーズ名
   skippedEarly?: boolean;    // 作業がなく早期終了したか
+  quality?: CycleQuality;    // サイクルの品質メトリクス
 }

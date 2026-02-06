@@ -1,3 +1,5 @@
+import { logger } from "./logger.js";
+
 type EventHandler<T = unknown> = (data: T) => void | Promise<void>;
 
 interface EventSubscription {
@@ -62,7 +64,7 @@ export class EventBus {
         try {
           await handler(event);
         } catch (err) {
-          console.error(`Event handler error for ${event.type}:`, err);
+          logger.error(`Event handler error for ${event.type}`, { error: err instanceof Error ? err.message : String(err) });
         }
       }
     }
@@ -71,7 +73,7 @@ export class EventBus {
       try {
         await handler(event);
       } catch (err) {
-        console.error(`Global event handler error:`, err);
+        logger.error("Global event handler error", { error: err instanceof Error ? err.message : String(err) });
       }
     }
   }
