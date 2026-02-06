@@ -100,7 +100,10 @@ export class CodeImplementer {
     logger.info("Created pre-change snapshot", { snapshotId });
 
     try {
-      for (const step of plan.steps) {
+      // 計画ステップの重複を排除
+      const deduplicatedSteps = this.deduplicatePlanSteps(plan.steps);
+
+      for (const step of deduplicatedSteps) {
         // パス正規化を最初に適用（src/src/ 重複などを解消）
         let fullPath = this.normalizePath(step.file);
 
@@ -392,6 +395,58 @@ export class CodeImplementer {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * 計画ステップの重複を排除・統合
+   * 同一ファイルへの複数操作を1つに統合する
+   */
+  private deduplicatePlanSteps(steps: RepairPlan["steps"]): RepairPlan["steps"] {
+    const fileOperations = new Map<string, RepairPlan["steps"][0]>();
+
+    for (const step of steps) {
+      const normalizedPath = this.normalizePath(step.file);
+      const existing = fileOperations.get(normalizedPath);
+
+      if (!existing) {
+        // 新規ファイル
+        fileOperations.set(normalizedPath, { ...step, file: normalizedPath });
+      } else {
+        // 重複を解決
+        logger.info("Merging duplicate file operation", {
+          file: normalizedPath,
+          existingAction: existing.action,
+          newAction: step.action,
+        });
+
+        // マージルール：
+        // - create + create → 後者のdetailsで上書き
+        // - create + modify → createのdetailsに統合
+        // - modify + modify → detailsを連結
+        // - delete が含まれる → deleteを優先
+        if (step.action === "delete") {
+          fileOperations.set(normalizedPath, { ...step, file: normalizedPath });
+        } else if (existing.action === "delete") {
+          // 既にdelete予定なら維持
+        } else if (existing.action === "create" && step.action === "modify") {
+          // createにmodifyの内容を統合
+          existing.details = `${existing.details}\n\nAdditionally: ${step.details}`;
+        } else {
+          // その他: 後の操作で上書き
+          existing.details = step.details;
+        }
+      }
+    }
+
+    const deduped = Array.from(fileOperations.values());
+    if (deduped.length < steps.length) {
+      logger.info("Plan steps deduplicated", {
+        original: steps.length,
+        deduplicated: deduped.length,
+      });
+    }
+
+    return deduped;
   }
 
   /**
