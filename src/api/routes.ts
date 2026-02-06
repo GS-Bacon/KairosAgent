@@ -278,6 +278,18 @@ router.post("/trigger/repair", async (_req: Request, res: Response) => {
   }
 });
 
+router.post("/trigger/research", async (_req: Request, res: Response) => {
+  try {
+    const result = await orchestrator.runResearchCycle();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err instanceof Error ? err.message : "Unknown error",
+    });
+  }
+});
+
 router.get("/config", (_req: Request, res: Response) => {
   const guardConfig = guard.getConfig();
   const schedulerStatus = scheduler.getStatus();

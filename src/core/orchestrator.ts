@@ -740,6 +740,106 @@ export class Orchestrator {
   getCycleCount(): number {
     return this.cycleCount;
   }
+
+  /**
+   * リサーチサイクルを強制実行（API用）
+   */
+  async runResearchCycle(): Promise<{
+    success: boolean;
+    cycleId: string;
+    topicsResearched: number;
+    totalQueued: number;
+    message: string;
+  }> {
+    if (this.isRunning) {
+      return {
+        success: false,
+        cycleId: "",
+        topicsResearched: 0,
+        totalQueued: 0,
+        message: "A cycle is already running",
+      };
+    }
+
+    this.isRunning = true;
+    const config = getConfig();
+    const cycleId = `research-${Date.now()}`;
+
+    try {
+      logger.info("Starting forced research cycle", { cycleId });
+
+      // アクティブな目標を取得
+      const activeGoals = goalManager.getActiveGoals();
+      if (activeGoals.length === 0) {
+        return {
+          success: false,
+          cycleId,
+          topicsResearched: 0,
+          totalQueued: 0,
+          message: "No active goals for research",
+        };
+      }
+
+      // ClaudeProviderを直接使用
+      const claude = new ClaudeProvider({ planModel: "opus" });
+      const researcher = new Researcher(claude);
+
+      // 目標から調査トピックを抽出
+      const topics = researcher.extractTopics(activeGoals);
+      const topicsToResearch = topics.slice(0, config.research.maxTopicsPerCycle);
+
+      logger.info("Research topics extracted", {
+        totalTopics: topics.length,
+        toResearch: topicsToResearch.length,
+      });
+
+      let totalQueued = 0;
+
+      for (const topic of topicsToResearch) {
+        try {
+          const result = await researcher.research(topic);
+          const queuedCount = await approachExplorer.processResearchResult(result);
+          totalQueued += queuedCount;
+
+          // JSONバックアップ
+          await this.saveResearchJsonBackup(result);
+
+          logger.info("Research topic completed", {
+            topic: topic.topic,
+            findings: result.findings.length,
+            approaches: result.approaches.length,
+            queued: queuedCount,
+          });
+        } catch (err) {
+          logger.error("Research topic failed", {
+            topic: topic.topic,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      return {
+        success: true,
+        cycleId,
+        topicsResearched: topicsToResearch.length,
+        totalQueued,
+        message: `Research completed: ${topicsToResearch.length} topics, ${totalQueued} improvements queued`,
+      };
+    } catch (err) {
+      logger.error("Research cycle failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {
+        success: false,
+        cycleId,
+        topicsResearched: 0,
+        totalQueued: 0,
+        message: err instanceof Error ? err.message : "Unknown error",
+      };
+    } finally {
+      this.isRunning = false;
+    }
+  }
 }
 
 export const orchestrator = new Orchestrator();
