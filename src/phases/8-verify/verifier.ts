@@ -248,10 +248,13 @@ export class CodeVerifier {
 
   /**
    * 検証→修正→再検証のループを実行
+   * 進捗チェック機構: 2回連続で進捗なしなら終了
    */
-  async verifyWithRetry(snapshotId: string, maxRetries: number = 2): Promise<VerificationResult> {
+  async verifyWithRetry(snapshotId: string, maxRetries: number = 3): Promise<VerificationResult> {
     let lastResult: VerificationResult | null = null;
     let retryCount = 0;
+    let consecutiveNoProgress = 0;
+    let previousErrorCount = Infinity;
 
     while (retryCount <= maxRetries) {
       logger.info(`Verification attempt ${retryCount + 1}/${maxRetries + 1}`);
@@ -266,36 +269,55 @@ export class CodeVerifier {
 
       lastResult = result;
 
-      // ビルドエラーを分析
+      // ビルドエラーを分析（全エラーを対象に修正を試みる）
       const analyzedErrors = result.buildErrors.map((err) => this.analyzeError(err));
-      const fixableErrors = analyzedErrors.filter((e) => e.fixable);
+      const currentErrorCount = analyzedErrors.length;
 
-      if (fixableErrors.length === 0) {
-        logger.warn("No fixable errors found, aborting retry");
-        break;
-      }
+      logger.info("Analyzed build errors", {
+        total: currentErrorCount,
+        mechanical: analyzedErrors.filter((e) => e.fixStrategy === "mechanical").length,
+        aiRepair: analyzedErrors.filter((e) => e.fixStrategy === "ai-repair").length,
+      });
 
-      // 自動修正を試みる
+      // 自動修正を試みる（全エラーを対象）
       const fixResult = await this.attemptAutoFix(analyzedErrors);
       result.autoFixAttempted = true;
       result.autoFixResult = fixResult;
 
-      if (!fixResult.success || fixResult.fixedErrors.length === 0) {
-        logger.warn("Auto-fix failed or no errors fixed");
-        break;
+      // 進捗チェック: エラー数が減ったか、修正が適用されたか
+      const hasProgress = fixResult.fixedErrors.length > 0 || currentErrorCount < previousErrorCount;
+
+      if (!hasProgress) {
+        consecutiveNoProgress++;
+        logger.warn("No progress in auto-fix attempt", {
+          consecutiveNoProgress,
+          currentErrors: currentErrorCount,
+          previousErrors: previousErrorCount,
+        });
+
+        if (consecutiveNoProgress >= 2) {
+          logger.error("Aborting retry: no progress for 2 consecutive attempts");
+          break;
+        }
+      } else {
+        consecutiveNoProgress = 0;
+        logger.info("Auto-fix made progress", {
+          fixed: fixResult.fixedErrors.length,
+          remaining: fixResult.remainingErrors.length,
+          changesApplied: fixResult.changesApplied,
+        });
       }
 
-      logger.info("Auto-fix applied, retrying verification", {
-        fixed: fixResult.fixedErrors,
-        remaining: fixResult.remainingErrors,
-      });
-
+      previousErrorCount = currentErrorCount;
       retryCount++;
     }
 
     // 最大リトライ到達、ロールバック
     if (lastResult) {
-      logger.error("Max retries reached, initiating rollback");
+      logger.error("Max retries reached, initiating rollback", {
+        attempts: retryCount,
+        consecutiveNoProgress,
+      });
       await this.rollback(snapshotId, "Build failed after auto-fix attempts");
       lastResult.rolledBack = true;
       lastResult.rollbackReason = `Build failed after ${retryCount} auto-fix attempts`;
@@ -389,16 +411,56 @@ export class CodeVerifier {
   }
 
   /**
+   * エラーメッセージからファイルパスと位置情報を抽出
+   */
+  private extractErrorLocation(error: string): { file?: string; line?: string; column?: string; errorCode?: string } {
+    // TypeScript形式: src/file.ts(10,5): error TS2xxx
+    const tsMatch = error.match(/([^\s:'"]+\.ts)\((\d+),(\d+)\):\s*error\s+(TS\d+)/);
+    if (tsMatch) {
+      return {
+        file: tsMatch[1],
+        line: tsMatch[2],
+        column: tsMatch[3],
+        errorCode: tsMatch[4],
+      };
+    }
+
+    // 一般形式: src/file.ts:10:5
+    const generalMatch = error.match(/([^\s:'"]+\.ts):(\d+):(\d+)/);
+    if (generalMatch) {
+      return {
+        file: generalMatch[1],
+        line: generalMatch[2],
+        column: generalMatch[3],
+      };
+    }
+
+    // ファイル名のみ: src/file.ts
+    const fileOnlyMatch = error.match(/([^\s:'"]+\.ts)/);
+    if (fileOnlyMatch) {
+      return { file: fileOnlyMatch[1] };
+    }
+
+    return {};
+  }
+
+  /**
    * ビルドエラーを分析し、修正可能かどうかを判定
+   * 全エラータイプをfixable=trueにし、AI修復を試みる
    */
   analyzeError(error: string): AnalyzedError {
+    // 位置情報を抽出
+    const location = this.extractErrorLocation(error);
+
     // 重複パスの検出: src/src/... パターン
     const duplicatePathMatch = error.match(/src\/src\/([^\s:'"]+)/);
     if (duplicatePathMatch) {
       return {
         type: "duplicate-path",
         fixable: true,
+        fixStrategy: "mechanical",
         details: {
+          ...location,
           invalidPath: `src/src/${duplicatePathMatch[1]}`,
           correctedPath: `src/${duplicatePathMatch[1]}`,
         },
@@ -416,47 +478,55 @@ export class CodeVerifier {
         return {
           type: "module-not-found",
           fixable: true,
+          fixStrategy: "mechanical",
           details: {
+            ...location,
             modulePath,
             correctedPath: corrected,
           },
           originalError: error,
         };
       }
+      // AIによるモジュールパス修正を試みる
       return {
         type: "module-not-found",
-        fixable: false,
-        details: { modulePath },
+        fixable: true,
+        fixStrategy: "ai-repair",
+        details: { ...location, modulePath },
         originalError: error,
       };
     }
 
-    // 構文エラー（TS1xxx）
-    const syntaxErrorMatch = error.match(/error TS1\d{3}:/);
+    // 構文エラー（TS1xxx）- AI修復可能
+    const syntaxErrorMatch = error.match(/error TS1(\d{3}):/);
     if (syntaxErrorMatch) {
       return {
         type: "syntax-error",
-        fixable: false,
-        details: {},
+        fixable: true,
+        fixStrategy: "ai-repair",
+        details: { ...location, errorCode: `TS1${syntaxErrorMatch[1]}` },
         originalError: error,
       };
     }
 
-    // 型エラー（TS2xxx）
-    const typeErrorMatch = error.match(/error TS2\d{3}:/);
+    // 型エラー（TS2xxx）- AI修復可能
+    const typeErrorMatch = error.match(/error TS2(\d{3}):/);
     if (typeErrorMatch) {
       return {
         type: "type-error",
-        fixable: false,
-        details: {},
+        fixable: true,
+        fixStrategy: "ai-repair",
+        details: { ...location, errorCode: `TS2${typeErrorMatch[1]}` },
         originalError: error,
       };
     }
 
+    // 未知のエラーもAI修復を試みる
     return {
       type: "unknown",
-      fixable: false,
-      details: {},
+      fixable: true,
+      fixStrategy: "ai-repair",
+      details: { ...location },
       originalError: error,
     };
   }
@@ -482,7 +552,7 @@ export class CodeVerifier {
             }
             break;
           case "module-not-found":
-            if (error.details.correctedPath) {
+            if (error.details.correctedPath && error.details.modulePath) {
               fixed = await this.fixDuplicatePath({
                 invalidPath: error.details.modulePath,
                 correctedPath: error.details.correctedPath,
@@ -621,8 +691,9 @@ ${originalContent}`;
   /**
    * 重複パス問題を修正（ファイル移動）
    */
-  async fixDuplicatePath(details: Record<string, string>): Promise<boolean> {
-    const { invalidPath, correctedPath } = details;
+  async fixDuplicatePath(details: AnalyzedError["details"]): Promise<boolean> {
+    const invalidPath = details.invalidPath;
+    const correctedPath = details.correctedPath;
 
     if (!invalidPath || !correctedPath) {
       return false;

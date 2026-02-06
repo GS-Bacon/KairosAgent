@@ -24,8 +24,8 @@ export class ClaudeProvider implements AIProvider {
     this.options = {
       model: options.model,  // デフォルトはClaude CLIのデフォルト（sonnet）
       planModel: options.planModel || "opus",  // plan策定はopus
-      timeout: options.timeout || 600000,      // 10分（最大）
-      idleTimeout: options.idleTimeout || 180000, // 3分（初回応答待ち含む）
+      timeout: options.timeout || 900000,      // 15分（最大）
+      idleTimeout: options.idleTimeout || 300000, // 5分（初回応答待ち含む）
     };
   }
 
@@ -54,6 +54,9 @@ export class ClaudeProvider implements AIProvider {
       let timedOut = false;
       let lastActivity = Date.now();
 
+      // startTimeを先に宣言（checkIdleより前）
+      const startTime = Date.now();
+
       // アクティビティベースのタイムアウト
       const checkIdle = setInterval(() => {
         const idleTime = Date.now() - lastActivity;
@@ -69,8 +72,6 @@ export class ClaudeProvider implements AIProvider {
           proc.kill("SIGTERM");
         }
       }, 5000);
-
-      const startTime = Date.now();
 
       proc.stdout.on("data", (data) => {
         lastActivity = Date.now();

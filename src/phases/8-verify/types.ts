@@ -40,6 +40,13 @@ export interface FixResult {
 export interface AnalyzedError {
   type: "duplicate-path" | "module-not-found" | "syntax-error" | "type-error" | "unknown";
   fixable: boolean;
-  details: Record<string, string>;
+  fixStrategy?: "mechanical" | "ai-repair";
+  details: {
+    file?: string;
+    line?: string;
+    column?: string;
+    errorCode?: string;
+    [key: string]: string | undefined;
+  };
   originalError: string;
 }

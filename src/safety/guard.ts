@@ -116,9 +116,27 @@ export class Guard {
     this.openCodeProvider = new OpenCodeProvider();
   }
 
+  /**
+   * パターンがファイルパスにマッチするかチェック
+   * ディレクトリパターン（/で終わる）は前方一致、ファイルパターンは完全一致
+   */
+  private matchesPattern(filePath: string, pattern: string): boolean {
+    // 正規化: 先頭の ./ を除去
+    const normalizedPath = filePath.replace(/^\.\//, "");
+    const normalizedPattern = pattern.replace(/^\.\//, "");
+
+    // ディレクトリパターン（/で終わる）は前方一致
+    if (normalizedPattern.endsWith("/")) {
+      return normalizedPath.startsWith(normalizedPattern);
+    }
+
+    // ファイルパターンは完全一致または末尾一致
+    return normalizedPath === normalizedPattern || normalizedPath.endsWith("/" + normalizedPattern);
+  }
+
   isFileProtected(filePath: string): boolean {
     for (const pattern of this.config.protectedPatterns) {
-      if (filePath.includes(pattern)) {
+      if (this.matchesPattern(filePath, pattern)) {
         return true;
       }
     }
@@ -130,7 +148,7 @@ export class Guard {
    */
   isStrictlyProtected(filePath: string): boolean {
     for (const pattern of this.config.strictlyProtectedPatterns) {
-      if (filePath.includes(pattern)) {
+      if (this.matchesPattern(filePath, pattern)) {
         return true;
       }
     }
@@ -142,7 +160,7 @@ export class Guard {
    */
   isConditionallyProtected(filePath: string): boolean {
     for (const pattern of this.config.conditionallyProtectedPatterns) {
-      if (filePath.includes(pattern)) {
+      if (this.matchesPattern(filePath, pattern)) {
         return true;
       }
     }
