@@ -1,8 +1,11 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, mkdirSync } from "fs";
 import { dirname, join, basename } from "path";
 import { GeneratedTest, TestGenResult } from "./types.js";
 import { getAIProvider } from "../../ai/factory.js";
+import { CodeSanitizer } from "../../ai/code-sanitizer.js";
 import { logger } from "../../core/logger.js";
+
+const MAX_SYNTAX_RETRIES = 2;
 
 export class TestGenerator {
   private srcDir: string;
@@ -62,13 +65,13 @@ export class TestGenerator {
 
     let testCode: string;
     try {
-      const ai = getAIProvider();
-      testCode = await ai.generateTest(code, {
-        targetFile: file,
-        targetCode: code,
-        testFramework: this.framework,
-        existingTests,
-      });
+      const result = await this.generateTestWithRetry(file, code, existingTests);
+      if (result.success) {
+        testCode = result.code;
+      } else {
+        logger.warn(`Test generation validation failed for ${file}: ${result.error}, using fallback`);
+        testCode = this.generateFallbackTest(file, code);
+      }
     } catch (err) {
       logger.warn("AI test generation failed, using fallback");
       testCode = this.generateFallbackTest(file, code);
@@ -78,13 +81,96 @@ export class TestGenerator {
     if (!existsSync(this.testDir)) {
       mkdirSync(this.testDir, { recursive: true });
     }
-    writeFileSync(testPath, testCode);
+    CodeSanitizer.safeWriteFile(testPath, testCode, { validateTs: true });
 
     return {
       targetFile: file,
       testFile: testPath,
       testCode,
       framework: this.framework,
+    };
+  }
+
+  private async generateTestWithRetry(
+    file: string,
+    code: string,
+    existingTests: string
+  ): Promise<{ success: true; code: string } | { success: false; error: string }> {
+    const ai = getAIProvider();
+    let lastErrors: string[] = [];
+
+    for (let attempt = 0; attempt <= MAX_SYNTAX_RETRIES; attempt++) {
+      let errorFeedback = "";
+
+      if (attempt > 0) {
+        errorFeedback = `
+
+[SYNTAX ERROR DETECTED]
+The previous test code generation had the following errors:
+${lastErrors.map((e, i) => `${i + 1}. ${e}`).join("\n")}
+
+IMPORTANT: Fix the syntax errors and generate valid TypeScript code.
+Pay special attention to:
+- Matching braces, parentheses, and brackets
+- Correct import/export statements
+- Proper TypeScript type annotations
+- Complete function/class definitions`;
+
+        logger.info("Retrying test generation with error context", {
+          file,
+          attempt: attempt + 1,
+          maxAttempts: MAX_SYNTAX_RETRIES + 1,
+          previousErrors: lastErrors,
+        });
+      }
+
+      const rawContent = await ai.generateTest(code, {
+        targetFile: file,
+        targetCode: code,
+        testFramework: this.framework,
+        existingTests,
+        errorFeedback,
+      });
+
+      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+
+      if (extracted.valid) {
+        if (CodeSanitizer.containsControlChars(extracted.code)) {
+          logger.error("AI generated test contains control characters", { file });
+          return {
+            success: false,
+            error: "Generated test contains control characters",
+          };
+        }
+
+        if (attempt > 0) {
+          logger.info("Test generation succeeded after retry", {
+            file,
+            successfulAttempt: attempt + 1,
+          });
+        }
+
+        return { success: true, code: extracted.code };
+      }
+
+      lastErrors = extracted.errors;
+      logger.warn("Generated test code has syntax errors", {
+        file,
+        attempt: attempt + 1,
+        errors: extracted.errors,
+        willRetry: attempt < MAX_SYNTAX_RETRIES,
+      });
+    }
+
+    logger.error("Test generation failed after all retries", {
+      file,
+      totalAttempts: MAX_SYNTAX_RETRIES + 1,
+      finalErrors: lastErrors,
+    });
+
+    return {
+      success: false,
+      error: `Invalid TypeScript syntax after ${MAX_SYNTAX_RETRIES + 1} attempts: ${lastErrors.join(", ")}`,
     };
   }
 

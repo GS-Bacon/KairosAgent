@@ -10,6 +10,7 @@ export interface TestContext {
   targetCode: string;
   testFramework?: string;
   existingTests?: string;
+  errorFeedback?: string;
 }
 
 export interface Analysis {

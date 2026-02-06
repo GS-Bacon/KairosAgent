@@ -9,6 +9,7 @@ import { guard } from "../../safety/guard.js";
 import { logger } from "../../core/logger.js";
 import { troubleCollector } from "../../trouble/index.js";
 import { getAIProvider } from "../../ai/factory.js";
+import { CodeSanitizer } from "../../ai/code-sanitizer.js";
 
 export class CodeVerifier {
   async verify(snapshotId: string): Promise<VerificationResult> {
@@ -639,12 +640,13 @@ ${originalContent}`;
         return false;
       }
 
-      // マークダウンコードブロックを除去
-      let cleanedContent = fixedContent;
-      const codeBlockMatch = fixedContent.match(/```(?:typescript|ts)?\s*\n?([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        cleanedContent = codeBlockMatch[1].trim();
+      // コードブロック抽出 + TypeScript構文検証
+      const extracted = CodeSanitizer.extractAndValidateCodeBlock(fixedContent, "typescript");
+      if (!extracted.valid) {
+        logger.warn("AI fix response is not valid TypeScript", { errors: extracted.errors });
+        return false;
       }
+      const cleanedContent = extracted.code;
 
       // Guard検証
       const validation = guard.validateCodeContent(cleanedContent);
@@ -661,8 +663,8 @@ ${originalContent}`;
       const backupPath = `${fullPath}.backup`;
       writeFileSync(backupPath, originalContent);
 
-      // 修正を適用
-      writeFileSync(fullPath, cleanedContent);
+      // 修正を適用（サニタイズ + TypeScript検証付き）
+      CodeSanitizer.safeWriteFile(fullPath, cleanedContent, { validateTs: true });
       logger.info("AI fix applied", { filePath });
 
       // 簡易ビルドチェック

@@ -1,5 +1,6 @@
 import { Phase, PhaseResult, CycleContext } from "../types.js";
 import { CodeImplementer } from "./implementer.js";
+import { snapshotManager } from "../../safety/snapshot.js";
 import { logger } from "../../core/logger.js";
 
 export class ImplementPhase implements Phase {
@@ -35,10 +36,24 @@ export class ImplementPhase implements Phase {
         failedChanges: failed.map((c) => ({ file: c.file, error: c.error })),
       });
 
+      // スナップショットからロールバック
+      if (result.snapshotId) {
+        try {
+          snapshotManager.restore(result.snapshotId);
+          logger.info("Rolled back to snapshot after implementation failure", {
+            snapshotId: result.snapshotId,
+          });
+        } catch (err) {
+          logger.error("Failed to restore snapshot", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       return {
         success: false,
         shouldStop: true,
-        message: `Implementation failed: ${failed.length} changes failed`,
+        message: `Implementation failed: ${failed.length} changes failed (rolled back)`,
         data: result,
       };
     }
