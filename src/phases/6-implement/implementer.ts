@@ -3,12 +3,18 @@ import { dirname, join } from "path";
 import { RepairPlan } from "../types.js";
 import { ImplementationChange, ImplementationResult } from "./types.js";
 import { getAIProvider } from "../../ai/factory.js";
+import { AIProvider, CodeContext } from "../../ai/provider.js";
 import { snapshotManager } from "../../safety/snapshot.js";
 import { guard } from "../../safety/guard.js";
 import { logger } from "../../core/logger.js";
 import { eventBus } from "../../core/event-bus.js";
 import { troubleCollector } from "../../trouble/index.js";
 import { CodeSanitizer } from "../../ai/code-sanitizer.js";
+
+/** 構文エラー時のリトライ設定 */
+const SYNTAX_RETRY_CONFIG = {
+  maxRetries: 2,  // 最大2回のリトライ（合計3回の試行）
+};
 
 export class CodeImplementer {
   private srcDir: string;
@@ -198,37 +204,28 @@ export class CodeImplementer {
   private async createFile(filePath: string, details: string): Promise<ImplementationChange> {
     try {
       const ai = getAIProvider();
-      const rawContent = await ai.generateCode(
+
+      // リトライループ：構文エラー時にフィードバックして再生成
+      const generateResult = await this.generateCodeWithRetry(
+        ai,
         `Create a new file with: ${details}`,
-        { file: filePath }
+        { file: filePath },
+        filePath,
+        "create"
       );
 
-      // ANSIエスケープ除去、コードブロック抽出、検証
-      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
-      if (!extracted.valid) {
-        logger.error("Generated code has syntax errors", {
-          file: filePath,
-          errors: extracted.errors,
-        });
+      if (!generateResult.success) {
         return {
           file: filePath,
           changeType: "create",
           success: false,
-          error: `Invalid TypeScript syntax: ${extracted.errors.join(", ")}`,
+          error: generateResult.error,
         };
       }
-      const newContent = extracted.code;
 
-      // 制御文字チェック
-      if (CodeSanitizer.containsControlChars(newContent)) {
-        logger.error("AI generated content contains control characters", { file: filePath });
-        return {
-          file: filePath,
-          changeType: "create",
-          success: false,
-          error: "Generated content contains control characters",
-        };
-      }
+      const newContent = generateResult.code;
+
+      // 制御文字チェックはgenerateCodeWithRetry内で実行済み
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
@@ -303,39 +300,29 @@ export class CodeImplementer {
       const ai = getAIProvider();
 
       const issue = plan.targetIssue?.message || plan.targetImprovement?.description;
-      const rawContent = await ai.generateCode(
+
+      // リトライループ：構文エラー時にフィードバックして再生成
+      const generateResult = await this.generateCodeWithRetry(
+        ai,
         `${details}\nFix this issue: ${issue}`,
-        { file: filePath, existingCode: originalContent, issue }
+        { file: filePath, existingCode: originalContent, issue },
+        filePath,
+        "modify"
       );
 
-      // ANSIエスケープ除去、コードブロック抽出、検証
-      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
-      if (!extracted.valid) {
-        logger.error("Generated code has syntax errors", {
-          file: filePath,
-          errors: extracted.errors,
-        });
+      if (!generateResult.success) {
         return {
           file: filePath,
           changeType: "modify",
           originalContent,
           success: false,
-          error: `Invalid TypeScript syntax: ${extracted.errors.join(", ")}`,
+          error: generateResult.error,
         };
       }
-      const newContent = extracted.code;
 
-      // 制御文字チェック
-      if (CodeSanitizer.containsControlChars(newContent)) {
-        logger.error("AI generated content contains control characters", { file: filePath });
-        return {
-          file: filePath,
-          changeType: "modify",
-          originalContent,
-          success: false,
-          error: "Generated content contains control characters",
-        };
-      }
+      const newContent = generateResult.code;
+
+      // 制御文字チェックはgenerateCodeWithRetry内で実行済み
 
       const contentValidation = guard.validateCodeContent(newContent);
       if (!contentValidation.safe) {
@@ -492,6 +479,84 @@ export class CodeImplementer {
     // detailsを短縮してサマリーに
     const shortDetails = details.slice(0, 80).replace(/\n/g, ' ');
     return `${shortDetails}${shortDetails.length < details.length ? '...' : ''} ${lineChange}`.trim();
+  }
+
+  /**
+   * 構文エラー時にリトライしてコード生成を行う
+   * エラー内容をAIにフィードバックして修正版を再生成させる
+   */
+  private async generateCodeWithRetry(
+    ai: AIProvider,
+    prompt: string,
+    context: CodeContext,
+    filePath: string,
+    changeType: "create" | "modify"
+  ): Promise<{ success: true; code: string } | { success: false; error: string }> {
+    let lastErrors: string[] = [];
+
+    for (let attempt = 0; attempt <= SYNTAX_RETRY_CONFIG.maxRetries; attempt++) {
+      // リトライ時はエラー内容をプロンプトに追加
+      const effectivePrompt = attempt === 0
+        ? prompt
+        : `${prompt}\n\n[IMPORTANT] The previous code generation attempt had syntax errors. Please fix these issues:\n${lastErrors.map((e, i) => `${i + 1}. ${e}`).join("\n")}\n\nGenerate syntactically correct TypeScript code.`;
+
+      if (attempt > 0) {
+        logger.info("Retrying code generation after syntax error", {
+          file: filePath,
+          attempt: attempt + 1,
+          maxAttempts: SYNTAX_RETRY_CONFIG.maxRetries + 1,
+          previousErrors: lastErrors,
+        });
+      }
+
+      const rawContent = await ai.generateCode(effectivePrompt, context);
+
+      // ANSIエスケープ除去、コードブロック抽出、検証
+      const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+
+      if (extracted.valid) {
+        // 制御文字チェック
+        if (CodeSanitizer.containsControlChars(extracted.code)) {
+          logger.error("AI generated content contains control characters", { file: filePath });
+          return {
+            success: false,
+            error: "Generated content contains control characters",
+          };
+        }
+
+        if (attempt > 0) {
+          logger.info("Code generation succeeded after retry", {
+            file: filePath,
+            successfulAttempt: attempt + 1,
+          });
+        }
+
+        return { success: true, code: extracted.code };
+      }
+
+      // 構文エラーを記録
+      lastErrors = extracted.errors;
+      logger.warn("Generated code has syntax errors", {
+        file: filePath,
+        changeType,
+        attempt: attempt + 1,
+        errors: extracted.errors,
+        willRetry: attempt < SYNTAX_RETRY_CONFIG.maxRetries,
+      });
+    }
+
+    // 全リトライ失敗
+    logger.error("Code generation failed after all retries", {
+      file: filePath,
+      changeType,
+      totalAttempts: SYNTAX_RETRY_CONFIG.maxRetries + 1,
+      finalErrors: lastErrors,
+    });
+
+    return {
+      success: false,
+      error: `Invalid TypeScript syntax after ${SYNTAX_RETRY_CONFIG.maxRetries + 1} attempts: ${lastErrors.join(", ")}`,
+    };
   }
 
   private deleteFile(filePath: string): ImplementationChange {
