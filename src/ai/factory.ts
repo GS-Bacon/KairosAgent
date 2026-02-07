@@ -5,22 +5,9 @@ import { OpenCodeProvider } from "./opencode-provider.js";
 import { HybridProvider } from "./hybrid-provider.js";
 import { ResilientAIProvider } from "./resilient-provider.js";
 import { logger } from "../core/logger.js";
+import type { AIConfig } from "../config/config.js";
 
-export interface AIConfig {
-  provider: "claude" | "glm" | "opencode" | "hybrid";
-  claude?: {
-    model?: string;
-    planModel?: string;  // plan策定用モデル（デフォルト: opus）
-    timeout?: number;
-    idleTimeout?: number;
-  };
-  glm?: {
-    apiKey: string;
-    baseUrl?: string;
-    model?: string;
-  };
-  resilient?: boolean;  // ResilientProviderでラップするか（デフォルト: true）
-}
+export type { AIConfig };
 
 let currentProvider: AIProvider | null = null;
 

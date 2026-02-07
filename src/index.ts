@@ -3,118 +3,12 @@ import { scheduler } from "./core/scheduler.js";
 import { orchestrator } from "./core/orchestrator.js";
 import { dailyReporter } from "./core/daily-reporter.js";
 import { APIServer } from "./api/server.js";
-import { initializeAI, AIConfig } from "./ai/factory.js";
+import { initializeAI } from "./ai/factory.js";
 import { guard } from "./safety/guard.js";
 import { goalManager } from "./goals/index.js";
-import { existsSync, readFileSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
+import { loadConfig } from "./config/config.js";
 import type { CycleResult, CycleContext } from "./phases/types.js";
-
-interface GitConfig {
-  autoPush: boolean;
-  pushRemote: string;
-  allowProtectedBranchPush: boolean;
-}
-
-interface DocsConfig {
-  enabled: boolean;
-  updateFrequency: "every-cycle" | "daily" | "weekly";
-  targets: Array<{
-    path: string;
-    sections: string[];
-  }>;
-}
-
-interface RateLimitFallbackConfig {
-  enabled: boolean;
-  fallbackProvider: "glm";
-  trackChanges: boolean;
-  autoReview: boolean;
-  reviewOnPhases: string[];
-}
-
-interface ResearchConfig {
-  enabled: boolean;
-  frequency: number;          // N回に1回実行（デフォルト: 5）
-  maxTopicsPerCycle: number;  // 1回のResearchで調査する最大トピック数
-  minConfidenceToQueue: number; // キュー登録の最小信頼度（デフォルト: 0.6）
-}
-
-interface KairosConfig {
-  port: number;
-  checkInterval: number;
-  ai: AIConfig;
-  git: GitConfig;
-  docs: DocsConfig;
-  rateLimitFallback: RateLimitFallbackConfig;
-  research: ResearchConfig;
-}
-
-const DEFAULT_CONFIG: KairosConfig = {
-  port: 3100,
-  checkInterval: 5 * 60 * 1000, // 5 minutes
-  ai: {
-    provider: "claude",
-  },
-  git: {
-    autoPush: true,
-    pushRemote: "origin",
-    allowProtectedBranchPush: false,
-  },
-  docs: {
-    enabled: true,
-    updateFrequency: "every-cycle",
-    targets: [
-      {
-        path: "./README.md",
-        sections: ["LEARNING_STATS", "SYSTEM_STATUS"],
-      },
-    ],
-  },
-  rateLimitFallback: {
-    enabled: true,
-    fallbackProvider: "glm",
-    trackChanges: true,
-    autoReview: true,
-    reviewOnPhases: ["plan", "implement"],
-  },
-  research: {
-    enabled: true,
-    frequency: 5,
-    maxTopicsPerCycle: 2,
-    minConfidenceToQueue: 0.6,
-  },
-};
-
-let globalConfig: KairosConfig = DEFAULT_CONFIG;
-
-function loadConfig(): KairosConfig {
-  const configPath = "./config.json";
-  if (existsSync(configPath)) {
-    try {
-      const content = readFileSync(configPath, "utf-8");
-      const loaded = JSON.parse(content);
-      globalConfig = {
-        ...DEFAULT_CONFIG,
-        ...loaded,
-        git: { ...DEFAULT_CONFIG.git, ...loaded.git },
-        docs: { ...DEFAULT_CONFIG.docs, ...loaded.docs },
-        rateLimitFallback: { ...DEFAULT_CONFIG.rateLimitFallback, ...loaded.rateLimitFallback },
-        research: { ...DEFAULT_CONFIG.research, ...loaded.research },
-      };
-      return globalConfig;
-    } catch (err) {
-      logger.warn("Failed to load config.json, using defaults");
-    }
-  }
-  globalConfig = DEFAULT_CONFIG;
-  return DEFAULT_CONFIG;
-}
-
-export function getConfig(): KairosConfig {
-  return globalConfig;
-}
-
-export type { KairosConfig, GitConfig, DocsConfig, RateLimitFallbackConfig, ResearchConfig };
 
 function ensureDirectories(): void {
   const dirs = ["./workspace", "./workspace/logs", "./workspace/history", "./workspace/snapshots"];

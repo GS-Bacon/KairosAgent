@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { logger } from "../core/logger.js";
-import { getConfig } from "../index.js";
+import { getConfig } from "../config/config.js";
 import { statsGenerator } from "./stats-generator.js";
 import { DocumentSection, DocumentUpdateResult } from "./types.js";
 

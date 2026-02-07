@@ -16,7 +16,7 @@ import { ClaudeProvider } from "./claude-provider.js";
 import { OpenCodeProvider } from "./opencode-provider.js";
 import { GLMProvider } from "./glm-provider.js";
 import { logger } from "../core/logger.js";
-import { getConfig } from "../index.js";
+import { getConfig } from "../config/config.js";
 import { ChangeTracker, changeTracker } from "./change-tracker.js";
 import { ClaudeReviewer, claudeReviewer } from "./claude-reviewer.js";
 import { getRateLimiter } from "./rate-limiter.js";

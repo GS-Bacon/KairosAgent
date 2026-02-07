@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { existsSync, renameSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { dirname, resolve } from "path";
 import { TestResult, VerificationResult, FixResult, AnalyzedError, PushResult } from "./types.js";
-import { getConfig } from "../../index.js";
+import { getConfig } from "../../config/config.js";
 import { gitignoreManager } from "../../git/index.js";
 import { rollbackManager } from "../../safety/rollback.js";
 import { guard } from "../../safety/guard.js";
@@ -243,6 +243,25 @@ export class CodeVerifier {
     }
   }
 
+  private async checkCircularDeps(): Promise<{ passed: boolean; errors: string[] }> {
+    try {
+      execSync("npx madge --circular --extensions ts src/", {
+        encoding: "utf-8",
+        stdio: "pipe",
+        timeout: 30000,
+      });
+      return { passed: true, errors: [] };
+    } catch (err: unknown) {
+      const errors: string[] = [];
+      if (err && typeof err === "object") {
+        const execErr = err as { stdout?: string; stderr?: string };
+        const output = (execErr.stdout || "") + (execErr.stderr || "");
+        errors.push(...output.split("\n").filter(l => l.trim()).slice(0, 20));
+      }
+      return { passed: false, errors };
+    }
+  }
+
   private async rollback(snapshotId: string, reason: string): Promise<void> {
     await rollbackManager.rollback(snapshotId, reason);
   }
@@ -372,6 +391,22 @@ export class CodeVerifier {
     partialResult: VerificationResult
   ): Promise<VerificationResult> {
     const result = { ...partialResult };
+
+    // 循環依存チェック（ビルド成功後、テスト前）
+    const circularResult = await this.checkCircularDeps();
+    if (!circularResult.passed) {
+      logger.error("Circular dependencies detected, initiating rollback", {
+        cycles: circularResult.errors.length,
+      });
+      await troubleCollector.captureFromBuildError(
+        "Circular dependencies:\n" + circularResult.errors.join("\n"),
+        "verify"
+      );
+      await this.rollback(snapshotId, "Circular dependencies detected");
+      result.rolledBack = true;
+      result.rollbackReason = "Circular dependencies detected";
+      return result;
+    }
 
     logger.debug("Running tests");
     const testResult = await this.runTests();

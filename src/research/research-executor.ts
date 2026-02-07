@@ -11,7 +11,7 @@ import { Researcher, approachExplorer } from "./index.js";
 import { cycleLogger } from "../core/cycle-logger.js";
 import { goalManager } from "../goals/index.js";
 import { logger } from "../core/logger.js";
-import { getConfig } from "../index.js";
+import { getConfig } from "../config/config.js";
 import type { ResearchResult } from "./types.js";
 
 /**
