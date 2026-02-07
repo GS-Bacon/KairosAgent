@@ -490,6 +490,9 @@ export class CodeImplementer {
         } else if (existing.action === "create" && step.action === "modify") {
           // createにmodifyの内容を統合
           existing.details = `${existing.details}\n\nAdditionally: ${step.details}`;
+        } else if (existing.action === "modify" && step.action === "modify") {
+          // modify + modify → detailsを連結
+          existing.details = `${existing.details}\n\nAdditionally: ${step.details}`;
         } else {
           // その他: 後の操作で上書き
           existing.details = step.details;
@@ -554,51 +557,8 @@ export class CodeImplementer {
   }
 
   /**
-   * エラーメッセージから行番号を抽出
-   */
-  private extractLineNumber(error: string): number | null {
-    // TypeScript形式: src/file.ts(10,5): error TS2xxx
-    const tsMatch = error.match(/\.ts\((\d+),\d+\)/);
-    if (tsMatch) return parseInt(tsMatch[1], 10);
-
-    // 一般形式: src/file.ts:10:5
-    const generalMatch = error.match(/\.ts:(\d+):\d+/);
-    if (generalMatch) return parseInt(generalMatch[1], 10);
-
-    // 行番号のみ: line 10
-    const lineMatch = error.match(/line\s+(\d+)/i);
-    if (lineMatch) return parseInt(lineMatch[1], 10);
-
-    return null;
-  }
-
-  /**
-   * エラー周辺のコードコンテキストを抽出
-   */
-  private extractErrorContext(code: string, lineNumber: number | null, contextLines: number = 5): string | null {
-    if (!lineNumber || !code) return null;
-
-    const lines = code.split("\n");
-    if (lineNumber > lines.length) return null;
-
-    const start = Math.max(0, lineNumber - contextLines - 1);
-    const end = Math.min(lines.length, lineNumber + contextLines);
-
-    const contextWithLineNumbers = lines
-      .slice(start, end)
-      .map((line, idx) => {
-        const ln = start + idx + 1;
-        const marker = ln === lineNumber ? ">>>" : "   ";
-        return `${marker} ${ln}: ${line}`;
-      })
-      .join("\n");
-
-    return contextWithLineNumbers;
-  }
-
-  /**
    * 構文エラー時にリトライしてコード生成を行う
-   * エラー内容とコンテキストをAIにフィードバックして修正版を再生成させる
+   * エラー内容と前回生成コードをAIにフィードバックして修正版を再生成させる
    */
   private async generateCodeWithRetry(
     ai: AIProvider,
@@ -608,46 +568,33 @@ export class CodeImplementer {
     changeType: "create" | "modify"
   ): Promise<{ success: true; code: string } | { success: false; error: string }> {
     let lastErrors: string[] = [];
-    const originalContent = context.existingCode || "";
+    let lastGeneratedCode: string | null = null;
 
     for (let attempt = 0; attempt <= SYNTAX_RETRY_CONFIG.maxRetries; attempt++) {
       let effectivePrompt = prompt;
 
-      // リトライ時はエラー内容とコンテキストをプロンプトに追加
-      if (attempt > 0) {
-        // エラーから行番号を抽出してコンテキストを取得
-        const errorContextParts: string[] = [];
-        for (const error of lastErrors) {
-          const lineNumber = this.extractLineNumber(error);
-          const errorContext = this.extractErrorContext(originalContent, lineNumber);
-          if (errorContext) {
-            errorContextParts.push(`Error at line ${lineNumber}:\n${errorContext}`);
-          }
-        }
+      // リトライ時は前回生成コードとエラー内容をプロンプトに追加
+      if (attempt > 0 && lastErrors.length > 0) {
+        const truncated = lastGeneratedCode && lastGeneratedCode.length > 4000
+          ? "...(truncated)\n" + lastGeneratedCode.slice(-4000)
+          : lastGeneratedCode;
 
         const errorFeedback = `
 
-[SYNTAX ERROR DETECTED]
-The previous code generation had the following errors:
-${lastErrors.map((e, i) => `${i + 1}. ${e}`).join("\n")}
-
-${errorContextParts.length > 0 ? `Error location context:\n${errorContextParts.join("\n\n")}` : ""}
-
-IMPORTANT: Fix the syntax errors and generate valid TypeScript code.
-Pay special attention to:
-- Matching braces, parentheses, and brackets
-- Correct import/export statements
-- Proper TypeScript type annotations
-- Complete function/class definitions`;
+[SYNTAX ERROR - RETRY ${attempt + 1}/${SYNTAX_RETRY_CONFIG.maxRetries + 1}]
+Errors: ${lastErrors.join(", ")}
+${truncated ? `\nYour previous output had these errors:\n\`\`\`\n${truncated}\n\`\`\`` : ""}
+Fix ALL syntax errors. Ensure all brackets/braces/parentheses are balanced.
+Generate the complete, corrected TypeScript code.`;
 
         effectivePrompt = prompt + errorFeedback;
 
-        logger.info("Retrying code generation with error context", {
+        logger.info("Retrying code generation with previous output feedback", {
           file: filePath,
           attempt: attempt + 1,
           maxAttempts: SYNTAX_RETRY_CONFIG.maxRetries + 1,
           previousErrors: lastErrors,
-          hasContext: errorContextParts.length > 0,
+          hasPreviousCode: !!lastGeneratedCode,
         });
       }
 
@@ -655,6 +602,9 @@ Pay special attention to:
 
       // ANSIエスケープ除去、コードブロック抽出、検証
       const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+
+      // 前回生成コードを保持（リトライ用）
+      lastGeneratedCode = extracted.code;
 
       if (extracted.valid) {
         // 制御文字チェック

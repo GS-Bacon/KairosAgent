@@ -143,6 +143,7 @@ export class SnapshotManager {
     const files = this.collectFilesFromSnapshot(snapshotPath);
 
     const resolvedSrcDir = resolve(this.srcDir);
+    const failedFiles: string[] = [];
     for (const [relativePath, content] of files) {
       const targetPath = join(this.srcDir, relativePath);
       // 復元先がsrcDir内か検証
@@ -158,7 +159,16 @@ export class SnapshotManager {
       if (!existsSync(targetDir)) {
         mkdirSync(targetDir, { recursive: true });
       }
-      writeFileSync(targetPath, content);
+      try {
+        writeFileSync(targetPath, content);
+      } catch (err) {
+        failedFiles.push(relativePath);
+        logger.error("Failed to restore file", { relativePath, error: String(err) });
+      }
+    }
+
+    if (failedFiles.length > 0) {
+      logger.error("Partial restore failure", { failedFiles, totalFiles: files.size });
     }
 
     logger.info("Restored snapshot", { id, fileCount: files.size });

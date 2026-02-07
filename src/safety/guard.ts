@@ -1,6 +1,5 @@
 import { logger } from "../core/logger.js";
 import { ClaudeProvider } from "../ai/claude-provider.js";
-import { OpenCodeProvider } from "../ai/opencode-provider.js";
 import { parseJSONObject } from "../ai/json-parser.js";
 import { AppealManager } from "./appeal-manager.js";
 import { TrialSystemResult } from "./review-types.js";
@@ -82,7 +81,6 @@ const DEFAULT_CONFIG: GuardConfig = {
 export class Guard {
   private config: GuardConfig;
   private claudeProvider: ClaudeProvider | null = null;
-  private openCodeProvider: OpenCodeProvider | null = null;
   private reviewLog: AIReviewResult[] = [];
   private appealManager: AppealManager | null = null;
 
@@ -114,7 +112,6 @@ export class Guard {
 
   initializeAIProviders(): void {
     this.claudeProvider = new ClaudeProvider();
-    this.openCodeProvider = new OpenCodeProvider();
   }
 
   /**
@@ -355,96 +352,51 @@ ${code.slice(0, 2000)}
 
 JSONのみを出力してください。`;
 
-    let claudeVerdict: { approved: boolean; reason: string } | null = null;
-    let openCodeVerdict: { approved: boolean; reason: string } | null = null;
-
-    // Claude判断
+    // Claude判断（主要な判断者）
+    let verdict: { approved: boolean; reason: string } | null = null;
     if (this.claudeProvider) {
       try {
-        const claudeResponse = await this.claudeProvider.chat(prompt);
-        const parsed = parseJSONObject<{ approved: boolean; reason: string }>(claudeResponse);
-        if (parsed) {
-          claudeVerdict = parsed;
-          logger.info("Claude security review", { verdict: claudeVerdict });
+        const response = await this.claudeProvider.chat(prompt);
+        verdict = parseJSONObject<{ approved: boolean; reason: string }>(response);
+        if (verdict) {
+          logger.info("Claude security review", { verdict });
         }
       } catch (err) {
         logger.warn("Claude security review failed", { error: err });
       }
     }
 
-    // OpenCode判断
-    if (this.openCodeProvider) {
-      try {
-        const openCodeResponse = await this.openCodeProvider.chat(prompt);
-        const parsed = parseJSONObject<{ approved: boolean; reason: string }>(openCodeResponse);
-        if (parsed) {
-          openCodeVerdict = parsed;
-          logger.info("OpenCode security review", { verdict: openCodeVerdict });
-        }
-      } catch (err) {
-        logger.warn("OpenCode security review failed", { error: err });
-      }
+    if (!verdict) {
+      return { approved: false, reason: "No AI verdict available" };
     }
 
-    // 判定ロジック：両方がapproved、またはClaudeのみがapproved
-    let finalDecision: "approved" | "rejected" = "rejected";
-    let reason = "No AI verdict available";
-
-    if (claudeVerdict && openCodeVerdict) {
-      if (claudeVerdict.approved && openCodeVerdict.approved) {
-        finalDecision = "approved";
-        reason = `Both AIs approved: Claude(${claudeVerdict.reason}), OpenCode(${openCodeVerdict.reason})`;
-      } else if (claudeVerdict.approved && !openCodeVerdict.approved) {
-        finalDecision = "approved";
-        reason = `Claude approved (${claudeVerdict.reason}), OpenCode rejected (${openCodeVerdict.reason}) - trusting Claude`;
-      } else {
-        finalDecision = "rejected";
-        reason = `Rejected: Claude(${claudeVerdict.reason}), OpenCode(${openCodeVerdict.reason})`;
-      }
-    } else if (claudeVerdict) {
-      finalDecision = claudeVerdict.approved ? "approved" : "rejected";
-      reason = `Claude only: ${claudeVerdict.reason}`;
-    } else if (openCodeVerdict) {
-      // OpenCode単独の場合は信頼性評価に基づく（今は保守的に）
-      const openCodeTrustScore = this.getOpenCodeTrustScore();
-      if (openCodeVerdict.approved && openCodeTrustScore >= 0.8) {
-        finalDecision = "approved";
-        reason = `OpenCode approved (trust: ${openCodeTrustScore.toFixed(2)}): ${openCodeVerdict.reason}`;
-      } else {
-        finalDecision = "rejected";
-        reason = `OpenCode only (trust: ${openCodeTrustScore.toFixed(2)}): ${openCodeVerdict.reason}`;
-      }
-    }
-
-    // 検出された危険パターンのリスト
+    const finalDecision = verdict.approved ? "approved" as const : "rejected" as const;
     const detectedPatterns = this.extractDangerousPatterns(code);
 
-    // ログに記録（全コード保存、保持期間延長のため詳細に）
     const result: AIReviewResult = {
       timestamp: new Date().toISOString(),
-      code: code,  // 全コード保存
+      code,
       codeLength: code.length,
       warnings,
       context,
       dangerousPatterns: detectedPatterns,
-      claudeVerdict,
-      openCodeVerdict,
+      claudeVerdict: verdict,
+      openCodeVerdict: null,
       finalDecision,
-      decisionReason: reason,
+      decisionReason: verdict.reason,
     };
     this.reviewLog.push(result);
 
-    // 古いログを削除（30日分を保持）
     this.pruneOldReviewLogs();
     this.saveReviewLog();
 
     logger.info("AI security review completed", {
       finalDecision,
-      reason,
+      reason: verdict.reason,
       codeLength: code.length,
       dangerousPatterns: detectedPatterns,
     });
-    return { approved: finalDecision === "approved", reason };
+    return { approved: verdict.approved, reason: verdict.reason };
   }
 
   /**

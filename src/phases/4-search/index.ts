@@ -1,3 +1,5 @@
+import { existsSync, readdirSync, statSync } from "fs";
+import { join } from "path";
 import { Phase, PhaseResult, CycleContext, Improvement } from "../types.js";
 import { CodeSearcher } from "./searcher.js";
 import { SearchQuery, SearchAnalysis } from "./types.js";
@@ -63,7 +65,7 @@ export class SearchPhase implements Phase {
         }
       }
     } catch (error) {
-      logger.debug("Pattern search failed, continuing with keyword search", { error });
+      logger.warn("Pattern search failed, continuing with keyword search", { error: error instanceof Error ? error.message : String(error) });
     }
 
     // 2. キーワード検索（既存）
@@ -93,7 +95,7 @@ export class SearchPhase implements Phase {
           context.aiCalls = (context.aiCalls || 0) + 1;
         }
       } catch (error) {
-        logger.debug("Semantic search failed", { error });
+        logger.warn("Semantic search failed", { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
@@ -224,17 +226,15 @@ export class SearchPhase implements Phase {
    * ソースファイルを収集
    */
   private getSourceFiles(): string[] {
-    const fs = require("fs");
-    const path = require("path");
     const files: string[] = [];
 
     const collectFiles = (dir: string) => {
-      if (!fs.existsSync(dir)) return;
+      if (!existsSync(dir)) return;
 
-      const entries = fs.readdirSync(dir);
+      const entries = readdirSync(dir);
       for (const entry of entries) {
-        const fullPath = path.join(dir, entry);
-        const stat = fs.statSync(fullPath);
+        const fullPath = join(dir, entry);
+        const stat = statSync(fullPath);
 
         if (stat.isDirectory()) {
           if (!["node_modules", ".git", "dist"].includes(entry)) {
@@ -246,7 +246,7 @@ export class SearchPhase implements Phase {
       }
     };
 
-    collectFiles(path.join(process.cwd(), "src"));
+    collectFiles(join(process.cwd(), "src"));
     return files;
   }
 }

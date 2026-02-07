@@ -21,6 +21,7 @@ import { ChangeTracker, changeTracker } from "./change-tracker.js";
 import { ClaudeReviewer, claudeReviewer } from "./claude-reviewer.js";
 import { getRateLimiter } from "./rate-limiter.js";
 import { tokenTracker } from "./token-tracker.js";
+import { RateLimitHandler } from "./rate-limit-handler.js";
 import { HYBRID_PROVIDER } from "../config/constants.js";
 
 export type PhaseName =
@@ -49,13 +50,6 @@ const PHASE_PROVIDER_MAP: Record<PhaseName, "claude" | "opencode"> = {
   "verify": "opencode",
 };
 
-interface RateLimitState {
-  isLimited: boolean;
-  limitedAt: Date | null;
-  backoffUntil: Date | null;
-  consecutiveLimits: number;
-}
-
 export class HybridProvider implements AIProvider {
   name = "hybrid";
   private claudeProvider: ClaudeProvider;
@@ -67,30 +61,22 @@ export class HybridProvider implements AIProvider {
 
   private changeTracker: ChangeTracker;
   private reviewer: ClaudeReviewer;
-  private rateLimitState: RateLimitState = {
-    isLimited: false,
-    limitedAt: null,
-    backoffUntil: null,
-    consecutiveLimits: 0,
-  };
-
-  // バックオフ設定（指数関数的） — constants.tsから取得
-  private readonly BASE_BACKOFF_MS = HYBRID_PROVIDER.BASE_BACKOFF_MS;
-  private readonly MAX_BACKOFF_MS = HYBRID_PROVIDER.MAX_BACKOFF_MS;
+  private rateLimitHandler: RateLimitHandler;
 
   constructor() {
     this.claudeProvider = new ClaudeProvider();
     this.openCodeProvider = new OpenCodeProvider();
     this.changeTracker = changeTracker;
     this.reviewer = claudeReviewer;
+    this.rateLimitHandler = new RateLimitHandler({
+      baseBackoffMs: HYBRID_PROVIDER.BASE_BACKOFF_MS,
+      maxBackoffMs: HYBRID_PROVIDER.MAX_BACKOFF_MS,
+      circuitBreakerThreshold: 3,
+    });
 
-    // GLMプロバイダーの初期化
     this.initializeGLM();
   }
 
-  /**
-   * GLMプロバイダーを初期化
-   */
   private initializeGLM(): void {
     const apiKey = process.env.GLM_API_KEY;
     if (apiKey) {
@@ -117,75 +103,18 @@ export class HybridProvider implements AIProvider {
   }
 
   /**
-   * レートリミットエラーかどうかを判定
-   */
-  private isRateLimitError(err: Error): boolean {
-    const message = err.message.toLowerCase();
-    return (
-      message.includes("rate limit") ||
-      message.includes("429") ||
-      message.includes("overloaded") ||
-      message.includes("too many requests") ||
-      message.includes("capacity")
-    );
-  }
-
-  /**
-   * レートリミット状態を更新
-   */
-  private recordRateLimit(): void {
-    const now = new Date();
-    this.rateLimitState.isLimited = true;
-    this.rateLimitState.limitedAt = now;
-    this.rateLimitState.consecutiveLimits++;
-
-    // 指数バックオフ計算
-    const backoffMs = Math.min(
-      this.BASE_BACKOFF_MS * Math.pow(2, this.rateLimitState.consecutiveLimits - 1),
-      this.MAX_BACKOFF_MS
-    );
-
-    this.rateLimitState.backoffUntil = new Date(now.getTime() + backoffMs);
-
-    logger.warn("Claude rate limited", {
-      consecutiveLimits: this.rateLimitState.consecutiveLimits,
-      backoffMs,
-      backoffUntil: this.rateLimitState.backoffUntil.toISOString(),
-    });
-
-    // RateLimiterのバックオフも更新
-    const limiter = getRateLimiter("claude");
-    limiter.backoffOnRateLimit(2);
-  }
-
-  /**
-   * レートリミットが解除されたかチェック
-   */
-  private isRateLimitExpired(): boolean {
-    if (!this.rateLimitState.backoffUntil) {
-      return true;
-    }
-    return new Date() > this.rateLimitState.backoffUntil;
-  }
-
-  /**
    * Claudeが利用可能かチェック（レートリミット考慮）
    */
   private async isClaudeAvailable(): Promise<boolean> {
-    if (this.rateLimitState.isLimited && !this.isRateLimitExpired()) {
-      logger.debug("Claude still in rate limit backoff", {
-        backoffUntil: this.rateLimitState.backoffUntil?.toISOString(),
-      });
+    if (this.rateLimitHandler.isCurrentlyLimited()) {
+      logger.debug("Claude still in rate limit backoff");
       return false;
     }
 
     try {
       const available = await this.claudeProvider.isAvailable();
-      if (available && this.rateLimitState.isLimited) {
-        // レートリミット解除
-        logger.info("Claude rate limit cleared");
-        this.rateLimitState.isLimited = false;
-        this.rateLimitState.consecutiveLimits = 0;
+      if (available) {
+        this.rateLimitHandler.recordSuccess();
       }
       return available;
     } catch {
@@ -206,12 +135,10 @@ export class HybridProvider implements AIProvider {
     // まずClaudeを試行
     if (await this.isClaudeAvailable()) {
       try {
-        // Claude復活時、未レビューの変更をレビュー
         await this.reviewPendingGLMChanges();
 
         const result = await operation(this.claudeProvider);
 
-        // トークン使用量を記録（文字数ベースの推定）
         if (context.inputText) {
           const outputText = typeof result === "string" ? result : JSON.stringify(result);
           tokenTracker.recordFromText(this.currentPhase, "claude", context.inputText, outputText);
@@ -219,9 +146,10 @@ export class HybridProvider implements AIProvider {
 
         return { result, usedProvider: "claude" };
       } catch (err) {
-        if (err instanceof Error && this.isRateLimitError(err)) {
-          this.recordRateLimit();
-          // 以下でGLMフォールバックを試みる
+        if (err instanceof Error && this.rateLimitHandler.isRetryableError(err)) {
+          this.rateLimitHandler.recordRateLimit();
+          const limiter = getRateLimiter("claude");
+          limiter.backoffOnRateLimit(2);
         } else {
           throw err;
         }
@@ -237,13 +165,11 @@ export class HybridProvider implements AIProvider {
 
     const result = await operation(this.glmProvider);
 
-    // トークン使用量を記録（文字数ベースの推定）
     if (context.inputText) {
       const outputText = typeof result === "string" ? result : JSON.stringify(result);
       tokenTracker.recordFromText(this.currentPhase, "glm", context.inputText, outputText);
     }
 
-    // 変更を追跡
     if (shouldTrack) {
       this.changeTracker.recordChange({
         timestamp: new Date().toISOString(),
@@ -257,9 +183,6 @@ export class HybridProvider implements AIProvider {
     return { result, usedProvider: "glm" };
   }
 
-  /**
-   * Claude復活時にGLMの変更をレビュー
-   */
   private async reviewPendingGLMChanges(): Promise<void> {
     const config = getConfig();
 
@@ -267,7 +190,6 @@ export class HybridProvider implements AIProvider {
       return;
     }
 
-    // レビュー対象フェーズかチェック
     if (!config.rateLimitFallback.reviewOnPhases.includes(this.currentPhase)) {
       return;
     }
@@ -287,7 +209,6 @@ export class HybridProvider implements AIProvider {
       const report = await this.reviewer.reviewPendingChanges();
 
       if (report.issues.length > 0) {
-        // 問題があれば改善キューに追加
         await this.reviewer.queueIssuesForFix(report);
         logger.warn("GLM changes had issues", {
           rejected: report.rejected,
@@ -320,7 +241,6 @@ export class HybridProvider implements AIProvider {
     const config = getConfig();
     const inputText = `${prompt}\n${context.existingCode || ""}`;
 
-    // claudeフェーズでレートリミットフォールバックが有効な場合
     if (
       config.rateLimitFallback.enabled &&
       PHASE_PROVIDER_MAP[this.currentPhase] === "claude"
@@ -339,7 +259,6 @@ export class HybridProvider implements AIProvider {
     const provider = this.getProviderForPhase();
     const result = await provider.generateCode(prompt, context);
 
-    // トークン使用量を記録
     tokenTracker.recordFromText(this.currentPhase, provider.name, inputText, result);
 
     return result;
@@ -377,7 +296,6 @@ export class HybridProvider implements AIProvider {
   async chat(prompt: string): Promise<string> {
     const config = getConfig();
 
-    // claudeフェーズでレートリミットフォールバックが有効な場合
     if (
       config.rateLimitFallback.enabled &&
       PHASE_PROVIDER_MAP[this.currentPhase] === "claude"
@@ -404,7 +322,6 @@ export class HybridProvider implements AIProvider {
     const claudeAvailable = await this.claudeProvider.isAvailable();
     this.openCodeAvailable = await this.openCodeProvider.isAvailable();
 
-    // GLMの可用性チェック
     if (this.glmProvider) {
       try {
         this.glmAvailable = await this.glmProvider.isAvailable();
@@ -419,27 +336,17 @@ export class HybridProvider implements AIProvider {
       glm: this.glmAvailable,
     });
 
-    // Claudeまたは（GLM + OpenCode）が使えればOK
     return claudeAvailable || (this.glmAvailable && this.openCodeAvailable);
   }
 
-  /**
-   * レートリミット状態を取得
-   */
-  getRateLimitState(): RateLimitState {
-    return { ...this.rateLimitState };
+  getRateLimitState() {
+    return this.rateLimitHandler.getState();
   }
 
-  /**
-   * GLM変更の統計を取得
-   */
   getGLMChangeStats(): ReturnType<ChangeTracker["getStats"]> {
     return this.changeTracker.getStats();
   }
 
-  /**
-   * 古い変更をクリーンアップ
-   */
   cleanupOldChanges(maxAgeDays: number = 30): number {
     return this.changeTracker.cleanup(maxAgeDays);
   }

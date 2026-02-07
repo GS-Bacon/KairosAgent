@@ -69,6 +69,7 @@ Output a JSON array of steps:
   {"order": 1, "action": "modify|create|delete|refactor", "file": "path", "details": "what to do"}
 ]
 
+IMPORTANT: Combine all changes to the same file into ONE step. One file = one step. Never create multiple steps for the same file.
 Be specific and minimal. Output ONLY the JSON array.`;
   }
 

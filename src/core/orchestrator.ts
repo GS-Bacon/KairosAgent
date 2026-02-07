@@ -2,7 +2,7 @@
  * Orchestrator
  *
  * 8フェーズの改善サイクルを統合制御
- * 学習パイプライン、リサーチ、ドキュメント更新は外部モジュールに委譲
+ * 学習パイプライン、リサーチ、後処理は外部モジュールに委譲
  */
 
 import { logger } from "./logger.js";
@@ -12,12 +12,11 @@ import { goalManager } from "../goals/index.js";
 import { getAIProvider } from "../ai/factory.js";
 import { HybridProvider, PhaseName } from "../ai/hybrid-provider.js";
 import { tokenTracker } from "../ai/token-tracker.js";
-import { ClaudeProvider } from "../ai/claude-provider.js";
 import { workDetector } from "./work-detector.js";
 import { cycleLogger } from "./cycle-logger.js";
+import { cyclePostProcessor } from "./cycle-post-processor.js";
 import { confirmationQueue } from "../ai/confirmation-queue.js";
 import { changeTracker } from "../ai/change-tracker.js";
-import { claudeReviewer } from "../ai/claude-reviewer.js";
 
 import { HealthCheckPhase } from "../phases/1-health-check/index.js";
 import { ErrorDetectPhase } from "../phases/2-error-detect/index.js";
@@ -34,12 +33,7 @@ import {
 } from "../learning/index.js";
 import { executeFeedbackLoop } from "../learning/learning-pipeline.js";
 import { troubleCollector } from "../trouble/index.js";
-import { abstractionEngine } from "../abstraction/index.js";
-import {
-  improvementQueue,
-  collectFromAbstraction,
-} from "../improvement-queue/index.js";
-import { documentUpdater } from "../docs/index.js";
+import { improvementQueue } from "../improvement-queue/index.js";
 import {
   shouldRunResearch,
   executeResearch,
@@ -50,7 +44,6 @@ import { ORCHESTRATION } from "../config/constants.js";
 export class Orchestrator {
   private phases: Phase[];
   private isRunning: boolean = false;
-  private runLock: Promise<void> | null = null;
   private currentContext: CycleContext | null = null;
   private lastFailedPhase: string | null = null;
   private hasCriticalFailure: boolean = false;
@@ -73,14 +66,12 @@ export class Orchestrator {
   }
 
   async runCycle(): Promise<CycleResult> {
-    // アトミックなisRunningチェック&セット
     if (this.isRunning) {
       logger.warn("Cycle already running, skipping");
       throw new Error("Cycle already in progress");
     }
     this.isRunning = true;
 
-    // システム一時停止中のチェック
     if (this.systemPaused) {
       this.isRunning = false;
       logger.warn("System is paused due to consecutive failures", {
@@ -98,7 +89,6 @@ export class Orchestrator {
       };
     }
 
-    // 軽量チェック: 作業があるかどうかを判定
     const workDetectionResult = await workDetector.detect();
     if (!workDetectionResult.hasWork) {
       this.isRunning = false;
@@ -127,26 +117,20 @@ export class Orchestrator {
     const context = createCycleContext();
     this.currentContext = context;
 
-    // トークン追跡を開始
     tokenTracker.startCycle(context.cycleId);
 
-    // Initialize learning system
     try {
       await initializeLearningSystem();
     } catch (error) {
       logger.warn("Failed to initialize learning system", { error });
     }
 
-    // Load active goals into context
     context.activeGoals = goalManager.getActiveGoals();
     context.goalProgress = [];
-
-    // Initialize learning context
     context.usedPatterns = [];
     context.patternMatches = 0;
     context.aiCalls = 0;
 
-    // Initialize trouble collector
     troubleCollector.setCycleId(context.cycleId);
     await troubleCollector.loadRecentTroubles();
     context.troubles = [];
@@ -159,16 +143,16 @@ export class Orchestrator {
 
     // GLMフォールバック変更の確認レビュー
     try {
-      await this.reviewPendingConfirmations();
+      await cyclePostProcessor.reviewPendingConfirmations();
     } catch (error) {
       logger.warn("Failed to review pending confirmations", { error });
     }
 
     try {
+      // 8フェーズ実行
       for (const phase of this.phases) {
         logger.info(`Executing phase: ${phase.name}`);
 
-        // Set current phase on hybrid provider if in use
         try {
           const provider = getAIProvider();
           if (provider instanceof HybridProvider) {
@@ -209,16 +193,11 @@ export class Orchestrator {
         }
       }
 
-      // Feedback Loop: パターン学習と信頼度更新（外部モジュール）
+      // 後処理: フィードバック、抽象化、ドキュメント更新
       await executeFeedbackLoop(context);
+      await cyclePostProcessor.run(context);
 
-      // Trouble Abstraction: トラブルパターンの抽出と改善キュー追加
-      await this.executeAbstraction(context);
-
-      // Document Update: ドキュメントの自動更新
-      await this.executeDocumentUpdate();
-
-      // Research: N回に1回、攻めの改善を実行（外部モジュール）
+      // Research: N回に1回、攻めの改善を実行
       if (shouldRunResearch(this.cycleCount)) {
         await executeResearch(context, this.cycleCount);
       }
@@ -243,7 +222,6 @@ export class Orchestrator {
         await troubleCollector.captureFromError(err, "orchestrator", "runtime-error", "critical");
       }
 
-      // 失敗時も使用パターンの信頼度を更新
       const usedPatterns = context.usedPatterns || [];
       for (const patternId of usedPatterns) {
         try {
@@ -257,7 +235,6 @@ export class Orchestrator {
       this.isRunning = false;
       const duration = Date.now() - context.startTime.getTime();
 
-      // Record goal progress if any
       if (context.goalProgress && context.goalProgress.length > 0) {
         for (const progress of context.goalProgress) {
           goalManager.recordProgress(
@@ -269,7 +246,6 @@ export class Orchestrator {
         }
       }
 
-      // Save token usage statistics
       try {
         const tokenStats = tokenTracker.saveCycleStats();
         if (tokenStats) {
@@ -288,7 +264,6 @@ export class Orchestrator {
         logger.warn("Failed to save token usage", { error });
       }
 
-      // Record learning statistics
       try {
         patternRepository.recordCycleCompletion(
           context.patternMatches || 0,
@@ -299,7 +274,6 @@ export class Orchestrator {
         logger.warn("Failed to save learning statistics", { error });
       }
 
-      // Flush troubles to repository
       try {
         const flushedTroubles = await troubleCollector.flush();
         context.troubles = flushedTroubles;
@@ -308,7 +282,6 @@ export class Orchestrator {
         logger.warn("Failed to flush troubles", { error });
       }
 
-      // キュー自動クリーンアップ
       try {
         await improvementQueue.cleanup(ORCHESTRATION.CLEANUP_DAYS);
         await confirmationQueue.cleanup(ORCHESTRATION.CLEANUP_DAYS);
@@ -317,7 +290,6 @@ export class Orchestrator {
         logger.warn("Failed to run queue cleanup", { error });
       }
 
-      // Update improvement queue status for processed improvements
       try {
         const cycleSuccess = !this.hasCriticalFailure;
         for (const imp of context.improvements) {
@@ -351,13 +323,11 @@ export class Orchestrator {
         troubles: context.troubles?.length || 0,
       });
 
-      // メモリリーク対策
       if (context.searchResults) {
         context.searchResults = undefined;
       }
     }
 
-    // CycleResult を構築して返す
     const troubleCount = context.troubles?.length || 0;
     const cycleSuccess = !this.hasCriticalFailure;
 
@@ -437,110 +407,6 @@ export class Orchestrator {
     return "no-op";
   }
 
-  /**
-   * トラブル抽象化と改善キュー追加
-   */
-  private async executeAbstraction(context: CycleContext): Promise<void> {
-    const troubles = context.troubles || [];
-    if (troubles.length === 0) {
-      logger.debug("No troubles to abstract");
-      return;
-    }
-
-    try {
-      const result = await abstractionEngine.analyze({
-        troubles,
-        existingPatterns: await abstractionEngine.getPatterns(),
-        cycleId: context.cycleId,
-      });
-
-      logger.info("Abstraction completed", {
-        newPatterns: result.newPatterns.length,
-        updatedPatterns: result.updatedPatterns.length,
-        preventionSuggestions: result.preventionSuggestions.length,
-      });
-
-      if (result.preventionSuggestions.length > 0) {
-        const collected = await collectFromAbstraction();
-        logger.info("Collected improvements from abstraction", { count: collected });
-      }
-    } catch (error) {
-      logger.warn("Failed to execute abstraction", { error });
-    }
-  }
-
-  /**
-   * ドキュメント自動更新
-   */
-  private async executeDocumentUpdate(): Promise<void> {
-    try {
-      const results = await documentUpdater.updateAllDocuments();
-      const updated = results.filter((r) => r.updated);
-
-      if (updated.length > 0) {
-        logger.info("Documents updated", {
-          count: updated.length,
-          documents: updated.map((r) => r.path),
-        });
-      }
-    } catch (error) {
-      logger.warn("Failed to update documents", { error });
-    }
-  }
-
-  /**
-   * GLMフォールバック変更の確認レビュー
-   */
-  private async reviewPendingConfirmations(): Promise<void> {
-    try {
-      const claude = new ClaudeProvider();
-      const isAvailable = await claude.isAvailable();
-      if (!isAvailable) {
-        logger.debug("Claude not available, skipping confirmation review");
-        return;
-      }
-
-      const pending = await confirmationQueue.getPending();
-      if (pending.length === 0) return;
-
-      logger.info("Reviewing GLM fallback changes from previous cycles", {
-        count: pending.length,
-      });
-
-      for (const item of pending.slice(0, ORCHESTRATION.MAX_CONFIRMATIONS_PER_CYCLE)) {
-        const change = changeTracker.getChange(item.changeId);
-        if (!change) {
-          await confirmationQueue.markReviewed(item.id, "confirmed", "Change not found");
-          continue;
-        }
-
-        try {
-          await confirmationQueue.markInReview(item.id);
-          const result = await claudeReviewer.reviewPendingChanges();
-
-          if (result.issues.length > 0) {
-            await confirmationQueue.markReviewed(
-              item.id,
-              "needs_review",
-              result.issues.map((i) => i.issues.join(", ")).join("; ")
-            );
-          } else {
-            await confirmationQueue.markReviewed(item.id, "confirmed", "No issues found");
-          }
-        } catch (err) {
-          logger.warn("Failed to review confirmation item", {
-            itemId: item.id,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn("Confirmation review failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   getLastCycleContext(): CycleContext | null {
     return this.currentContext;
   }
@@ -580,10 +446,6 @@ export class Orchestrator {
     return this.cycleCount;
   }
 
-  /**
-   * リサーチサイクルを強制実行（API用）
-   * 外部モジュールに委譲
-   */
   async runResearchCycle(): Promise<{
     success: boolean;
     cycleId: string;

@@ -98,29 +98,30 @@ export class TestGenerator {
   ): Promise<{ success: true; code: string } | { success: false; error: string }> {
     const ai = getAIProvider();
     let lastErrors: string[] = [];
+    let lastGeneratedCode: string | null = null;
 
     for (let attempt = 0; attempt <= MAX_SYNTAX_RETRIES; attempt++) {
       let errorFeedback = "";
 
       if (attempt > 0) {
+        const truncated = lastGeneratedCode && lastGeneratedCode.length > 4000
+          ? "...(truncated)\n" + lastGeneratedCode.slice(-4000)
+          : lastGeneratedCode;
+
         errorFeedback = `
 
-[SYNTAX ERROR DETECTED]
-The previous test code generation had the following errors:
-${lastErrors.map((e, i) => `${i + 1}. ${e}`).join("\n")}
+[SYNTAX ERROR - RETRY ${attempt + 1}/${MAX_SYNTAX_RETRIES + 1}]
+Errors: ${lastErrors.join(", ")}
+${truncated ? `\nYour previous output had these errors:\n\`\`\`\n${truncated}\n\`\`\`` : ""}
+Fix ALL syntax errors. Ensure all brackets/braces/parentheses are balanced.
+Generate the complete, corrected TypeScript test code.`;
 
-IMPORTANT: Fix the syntax errors and generate valid TypeScript code.
-Pay special attention to:
-- Matching braces, parentheses, and brackets
-- Correct import/export statements
-- Proper TypeScript type annotations
-- Complete function/class definitions`;
-
-        logger.info("Retrying test generation with error context", {
+        logger.info("Retrying test generation with previous output feedback", {
           file,
           attempt: attempt + 1,
           maxAttempts: MAX_SYNTAX_RETRIES + 1,
           previousErrors: lastErrors,
+          hasPreviousCode: !!lastGeneratedCode,
         });
       }
 
@@ -133,6 +134,9 @@ Pay special attention to:
       });
 
       const extracted = CodeSanitizer.extractAndValidateCodeBlock(rawContent, "typescript");
+
+      // 前回生成コードを保持（リトライ用）
+      lastGeneratedCode = extracted.code;
 
       if (extracted.valid) {
         if (CodeSanitizer.containsControlChars(extracted.code)) {

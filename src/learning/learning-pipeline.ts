@@ -63,7 +63,7 @@ async function recordFailedApproach(context: CycleContext): Promise<void> {
       });
     }
 
-    if (context.failedPhase === "implement" || context.failedPhase === "verify") {
+    if (context.failedPhase) {
       const failureReason = context.failureReason || "Unknown failure";
       if (!failureTroubles.some(t => t.phase === context.failedPhase)) {
         failureTroubles.push({
