@@ -1,5 +1,6 @@
 import { writeFileSync, readFileSync } from "fs";
 import { logger } from "../core/logger.js";
+import { CODE_GENERATION } from "../config/constants.js";
 
 /**
  * コードサニタイザー
@@ -283,6 +284,46 @@ export class CodeSanitizer {
     }
 
     return { code, valid: true, errors: [] };
+  }
+
+  /**
+   * 末尾の閉じ括弧不足を自動修復（単純なケースのみ）
+   * 条件: エラーが "Unclosed brackets" のみ & 不足数が MAX_AUTO_REPAIR_BRACKETS 以下
+   */
+  static attemptBracketRepair(
+    code: string
+  ): { repaired: boolean; code?: string; fixes?: string[] } {
+    const validation = this.isValidTypeScript(code);
+    if (validation.valid) return { repaired: false };
+
+    // Unclosed brackets エラーのみが対象
+    const isBracketOnly = validation.errors.every(e =>
+      e.startsWith("Unclosed brackets:")
+    );
+    if (!isBracketOnly || validation.errors.length !== 1) {
+      return { repaired: false };
+    }
+
+    // 期待される閉じ括弧を抽出
+    const expected = this.extractExpectedBrackets(validation.errors[0]);
+    if (expected.length === 0 || expected.length > CODE_GENERATION.MAX_AUTO_REPAIR_BRACKETS) {
+      return { repaired: false };
+    }
+
+    const repaired = code.trimEnd() + "\n" + expected.join("");
+    const recheck = this.isValidTypeScript(repaired);
+    if (!recheck.valid) return { repaired: false };
+
+    return {
+      repaired: true,
+      code: repaired,
+      fixes: [`Added ${expected.length} closing bracket(s): ${expected.join("")}`],
+    };
+  }
+
+  private static extractExpectedBrackets(errorMsg: string): string[] {
+    const matches = Array.from(errorMsg.matchAll(/'([}\])])'/g));
+    return matches.map(m => m[1]);
   }
 }
 

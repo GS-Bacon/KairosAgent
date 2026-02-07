@@ -3,6 +3,8 @@ import { dirname, join, basename } from "path";
 import { GeneratedTest, TestGenResult } from "./types.js";
 import { getAIProvider } from "../../ai/factory.js";
 import { CodeSanitizer } from "../../ai/code-sanitizer.js";
+import { extractRelevantContext } from "../../ai/token-estimator.js";
+import { CODE_GENERATION } from "../../config/constants.js";
 import { logger } from "../../core/logger.js";
 
 const MAX_SYNTAX_RETRIES = 2;
@@ -104,17 +106,35 @@ export class TestGenerator {
       let errorFeedback = "";
 
       if (attempt > 0) {
-        const truncated = lastGeneratedCode && lastGeneratedCode.length > 4000
-          ? "...(truncated)\n" + lastGeneratedCode.slice(-4000)
-          : lastGeneratedCode;
+        // エラー行番号を抽出してコンテキスト生成
+        const errorLineNumbers = lastErrors
+          .flatMap(err => {
+            const matches = err.matchAll(/line (\d+)/g);
+            return Array.from(matches).map(m => parseInt(m[1]));
+          });
+
+        let codeContext: string;
+        if (lastGeneratedCode && errorLineNumbers.length > 0) {
+          codeContext = extractRelevantContext(lastGeneratedCode, errorLineNumbers, 10);
+        } else if (lastGeneratedCode) {
+          codeContext = lastGeneratedCode.length > CODE_GENERATION.RETRY_FEEDBACK_CODE_LIMIT
+            ? "...(truncated)\n" + lastGeneratedCode.slice(-CODE_GENERATION.RETRY_FEEDBACK_CODE_LIMIT)
+            : lastGeneratedCode;
+        } else {
+          codeContext = "";
+        }
 
         errorFeedback = `
 
-[SYNTAX ERROR - RETRY ${attempt + 1}/${MAX_SYNTAX_RETRIES + 1}]
-Errors: ${lastErrors.join(", ")}
-${truncated ? `\nYour previous output had these errors:\n\`\`\`\n${truncated}\n\`\`\`` : ""}
-Fix ALL syntax errors. Ensure all brackets/braces/parentheses are balanced.
-Generate the complete, corrected TypeScript test code.`;
+=== SYNTAX ERROR - RETRY ${attempt + 1}/${MAX_SYNTAX_RETRIES + 1} ===
+Errors found:
+${lastErrors.map((e, i) => `  ${i + 1}. ${e}`).join("\n")}
+
+${codeContext ? `Error location in your previous output:\n\`\`\`typescript\n${codeContext}\n\`\`\`\n` : ""}
+CRITICAL: Fix the errors above.
+- Count ALL opening and closing brackets: { } [ ] ( )
+- For nested arrays/objects, verify EACH level closes: [[{},{}]]
+- Generate the COMPLETE file, no truncation.`;
 
         logger.info("Retrying test generation with previous output feedback", {
           file,
@@ -137,6 +157,17 @@ Generate the complete, corrected TypeScript test code.`;
 
       // 前回生成コードを保持（リトライ用）
       lastGeneratedCode = extracted.code;
+
+      if (!extracted.valid) {
+        // 自動修復を試行
+        const repair = CodeSanitizer.attemptBracketRepair(extracted.code);
+        if (repair.repaired) {
+          logger.info("Auto-repaired bracket errors in test code", {
+            file, attempt: attempt + 1, fixes: repair.fixes,
+          });
+          return { success: true, code: repair.code! };
+        }
+      }
 
       if (extracted.valid) {
         if (CodeSanitizer.containsControlChars(extracted.code)) {

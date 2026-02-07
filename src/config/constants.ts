@@ -146,6 +146,10 @@ export const CODE_GENERATION = {
   LARGE_CODE_THRESHOLD: 32_000,
   /** エラー周辺のコンテキスト行数 */
   CONTEXT_LINES: 50,
+  /** リトライ時フィードバックのコード上限文字数 */
+  RETRY_FEEDBACK_CODE_LIMIT: 8000,
+  /** 自動修復する閉じ括弧の最大数 */
+  MAX_AUTO_REPAIR_BRACKETS: 5,
 } as const;
 
 // ========================================

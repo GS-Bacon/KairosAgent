@@ -85,7 +85,8 @@ export class OpenCodeProvider implements AIProvider {
   }
 
   async generateCode(prompt: string, context: CodeContext): Promise<string> {
-    const fullPrompt = `You are a code generator. Generate ONLY the code, no explanations.
+    const fullPrompt = `You are a code generator. Generate ONLY valid TypeScript code, no explanations.
+IMPORTANT: Ensure ALL brackets { } [ ] ( ) are properly balanced and closed.
 
 File: ${context.file}
 ${context.existingCode ? `Existing code:\n${context.existingCode}` : ""}
@@ -93,23 +94,27 @@ ${context.issue ? `Issue to fix: ${context.issue}` : ""}
 
 Task: ${prompt}
 
-Output ONLY the complete code for the file.`;
+Output ONLY the complete code for the file. Verify bracket balance before responding.`;
 
     return this.runOpenCode(fullPrompt);
   }
 
   async generateTest(code: string, context: TestContext): Promise<string> {
-    const fullPrompt = `Generate unit tests for the following code.
+    const fullPrompt = `Generate unit tests. Output ONLY valid TypeScript test code, no explanations.
+IMPORTANT: Ensure ALL brackets { } [ ] ( ) are properly balanced and closed.
 
 Target file: ${context.targetFile}
 ${context.testFramework ? `Test framework: ${context.testFramework}` : "Use vitest"}
 
-Code:
+Code to test:
 \`\`\`
 ${code}
 \`\`\`
 
-Output ONLY the test code.`;
+${context.existingTests ? `Existing tests:\n${context.existingTests}` : ""}
+${context.errorFeedback ? context.errorFeedback : ""}
+
+Output ONLY the test code. Verify bracket balance before responding.`;
 
     return this.runOpenCode(fullPrompt);
   }
