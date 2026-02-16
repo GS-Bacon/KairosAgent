@@ -1,4 +1,4 @@
-# AutoClaudeKMP - 自律AIエージェントシステム ロードマップ
+# KairosAgent - 自律AIエージェントシステム ロードマップ
 
 ## Context
 
@@ -32,7 +32,7 @@
 オーナー（人間）
 │  goals.md / directive（目標・方針指示）
 │
-AutoClaudeKMP（パイプラインオーケストレーション層）
+KairosAgent（パイプラインオーケストレーション層）
 │
 ├── CLI (autoclaude)    — 人間介入インターフェース
 ├── workspace/          — 部署間通信（md/json）
@@ -271,7 +271,7 @@ workspace/
 ## ロードマップ
 
 ### Phase 0: DevSkills成熟（並行・別リポジトリ）
-> AutoClaudeKMPと並行してDevSkillsで進める。Phase 2以降の連携に必要。
+> KairosAgentと並行してDevSkillsで進める。Phase 2以降の連携に必要。
 
 - [ ] カスタムフロー登録機能（`get_pipeline_steps()`の外部化）
 - [ ] 外部コマンドディレクトリ対応（commands/以外からの読み込み）
